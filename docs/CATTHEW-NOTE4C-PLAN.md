@@ -1,6 +1,6 @@
 # Catthew household terminal on Zectrix Note4C
 
-Status: REVISED DRAFT FOR APPROVAL — incorporates canvas annotations fb-57 through fb-64. These are design and delivery decisions; no final implementation/deployment approval verdict has been received.
+Status: APPROVED — canvas verdict fb-65 and subsequent user message "approved plan" authorize the selected design and delivery path. Implementation progress, tested slices, and deployment blockers are tracked in `docs/CATTHEW-IMPLEMENTATION-PROGRESS.md`.
 
 ## Objective and settled requirements
 
@@ -169,7 +169,7 @@ Proposed delivery path for final approval:
 - Source: `shantanugoel/hearth`, base `main` at inspected commit `edd75fd7ea7e9879b141a84aa39ce2c74b6c92bc` (verify freshness before implementation).
 - Fork: `theduy3/hearth`, subject to checking for an existing fork/name collision. Preserve an existing repository rather than overwriting it.
 - Feature branch: `feat/catthew-note4c`; PR targets the fork's `main`, not upstream. Create a reviewable PR with verification evidence. Do not merge automatically; the annotation requests a fork and PR, not a merge method or upstream submission.
-- Environment: existing Bluehost VPS and this user's attached Note4C; hostname `zectrix.theduy.cloud`. Implementation, remote rollout, credential provisioning, and flashing remain pending final approval of this revised plan.
+- Environment: existing Bluehost VPS and this user's attached Note4C; hostname `zectrix.theduy.cloud`. The final plan was approved; rollout still requires the concrete prerequisite checks below and must stop on missing credentials or external state.
 - Required checks: baseline plus changed-flow tests, color simulator, ESP-IDF build, authenticated HTTPS checks, household scope/confirmation tests, live source verification, physical four-color/button/audio acceptance, restart/retry reconciliation, and existing Catthew Telegram/CLI regression checks.
 - Before rollout: specify the runtime user/private network, service commands, resource limits, disposable test records, DNS management path, and recovery commands in the executable implementation plan. Never silently expand authority to unrelated VPS services.
 - No new paid STT, VPS upgrade, unrelated credential changes, broad vault permission changes, force pushes, or production-service replacement is authorized by the annotations.
@@ -198,7 +198,7 @@ Recorded from annotations fb-57 through fb-64:
 
 Output and button questions are resolved by the user's latest message. The remaining technical choices—exact model identifier, lightweight English speech engine, audio format, and measured resource limits—will be verified and filled into the executable implementation plan rather than guessed. Private Telegram remains the proposed destination for consequential action approvals; short press is reserved for page navigation.
 
-Proposed defaults for review: delete raw microphone audio after processing and synthesized reply audio after delivery, expire unprocessed/retry audio within 24 hours, retain a minimal request/result journal without full audio, and choose speech latency targets from the VPS benchmark. These are proposed policies, not claimed user selections. A named GitHub PR and deployment host do not constitute a final Approve verdict for implementation or rollout.
+Proposed defaults for review: delete raw microphone audio after processing and synthesized reply audio after delivery, expire unprocessed/retry audio within 24 hours, retain a minimal request/result journal without full audio, and choose speech latency targets from the VPS benchmark. These defaults were included in the approved plan. No new paid service, broad credential transfer, or unrelated infrastructure change is authorized.
 
 ## Public reference sources
 

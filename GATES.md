@@ -6,8 +6,13 @@ Scope: Implement the approved color voice terminal, preserving Catthew identity 
 
 - [x] G1: The isolated upstream baseline passes its existing regression suite
   CHECK: python3 -m unittest discover -s tests -v
-  EXPECT: OK
-  EVIDENCE: automatic-evidence=v1; definition-sha256=a9ebb7a92aea1c58d944c284626802ababdbb4c8785404f2e652da8974768869; exit=0; EXPECT=matched; output-sha256=958b668d4891f178b0851c3895845b32d4c931bf803414b10fb19104880bf563; output-bytes=9245; shell=/bin/sh; cwd=/Users/theduy/Repo/hearth-catthew-note4c; path=20e18ba3d3ca/32 entries
+  EXPECT: /^OK$/m
+  EVIDENCE: automatic-evidence=v1; definition-sha256=12a88a106df0a0405160214aa2c4016fb2fd05a99cb6821de7676919ffb5c8ed; exit=0; EXPECT=matched; output-sha256=8478a51089aaea2ca54b2f8999785149c1bbeb600e00fef3b39a4140ba00ba2c; output-bytes=12472; shell=/bin/sh; cwd=/Users/theduy/Repo/hearth-catthew-note4c; path=20e18ba3d3ca/32 entries
+
+- [x] G2A: Gateway stream safety and durable request behavior pass focused loopback/database tests
+  CHECK: python3 -m unittest discover -s tests -p test_gateway.py -v && python3 -m unittest discover -s tests -p test_journal.py -v
+  EXPECT: /^OK$/m
+  EVIDENCE: automatic-evidence=v1; definition-sha256=2de56dadd374697738491613ee6851e10ab6756cf6ed4641dafa86e02dde25e1; exit=0; EXPECT=matched; output-sha256=31e88f1fd1b3778837f0807946b40cd805d748319fbf2e10fff0e30070e85ebb; output-bytes=3424; shell=/bin/sh; cwd=/Users/theduy/Repo/hearth-catthew-note4c; path=20e18ba3d3ca/32 entries
 
 - [ ] G2: Authenticated hub, Catthew sessions, approvals, durable retries, source projections, STT and TTS pass behavioral integration tests
   EVIDENCE: pending; write and run focused tests before claiming this outcome
