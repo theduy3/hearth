@@ -20,6 +20,6 @@ ESP-IDF 6.1 is a build dependency, pinned by container digest. `espressif/esp_co
 
 ## VPS speech dependencies and models
 
-Speech dependencies are installed separately from Hermes and device firmware. The Piper engine is GPLv3 and is not vendored into this repository or linked into device firmware. The selected `en_US-ljspeech-medium` voice uses the public-domain LJ Speech dataset; review the model's own published model card/license when redistributing artifacts. Faster Whisper/CTranslate2 and other Python dependencies retain their package licenses.
+Speech dependencies are installed separately from Hermes and device firmware. The Piper engine is GPLv3 and is not vendored into this repository or linked into device firmware. The selected `en_US-joe-medium` male voice uses the CC0 OHF-Voice Joe dataset. Its pinned model card and artifact checksums are retained with the VPS candidate installation. Piper1.5 or newer is required; the active runtime is1.8. Review the model card/license when redistributing artifacts. Faster Whisper/CTranslate2 and other Python dependencies retain their package licenses.
 
 The model preparation tool records pinned revisions, checksums and available license/model-card material beside the private VPS model installation. No speech model weights or voices are committed or included in firmware artifacts.

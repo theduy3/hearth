@@ -12,11 +12,11 @@ This fork targets the **ESP32-S3 N16R8 Note4C with a real 400 × 300 black/white
 - **Short-press Up:** return to the previous page.
 - **Hold Down:** stop audio/display work safely and enter deep sleep. The front button wakes the device.
 
-The panel uses full refreshes. Navigation presses during a refresh are combined; recording and reply playback run independently. Recording and processing use the indicator rather than additional screen refreshes. An offline badge distinguishes a cached page from current data.
+The panel uses full refreshes; the user observed about15seconds for a page change, with flashing stopping once it settles. Navigation presses during a refresh are combined; recording and reply playback run independently. Recording and processing use the indicator rather than additional screen refreshes. An offline badge distinguishes a cached page from current data.
 
 ## Household scope
 
-Catthew keeps its existing SOUL and uses `openai-codex` / `gpt-6.1-sol`. Note4C has a separate persistent conversation while sharing the same underlying records with Telegram and CLI.
+Catthew keeps its existing SOUL. The approved model selection is `openai-codex` / `gpt-6.1-sol`; the latest release check detected a live selection of `gpt-6.1-terra`, left unchanged pending user direction (see the progress ledger). Note4C has a separate persistent conversation while sharing the same underlying records with Telegram and CLI.
 
 - Calendar: **Kittyggup Family**, timezone **America/Vancouver**.
 - Tasks: exact `catthew` tag in existing `Tasks/tasks`, `Tasks/bugs` and `Tasks/ideas`.
@@ -27,9 +27,9 @@ The household MCP exposes scoped record operations. It does not expose a shell, 
 
 ## Current verified checkpoint
 
-The firmware at `41c302dde153b2f0f68b795b82d5f3caec6c68d0` built with the pinned ESP-IDF 6.1 toolchain in [Actions run 43364193431](https://github.com/theduy3/hearth/actions/runs/43364193431). Its bootloader, partition table and application were flashed and verified on the backed-up Note4C. USB reports the expected device identity and an unconfigured device.
+The firmware at `9fd1f981c10cf14038702185dbeeef35e3da802a` built with the pinned ESP-IDF 6.1 toolchain in [Actions run 43374130066](https://github.com/theduy3/hearth/actions/runs/43374130066). Its bootloader, partition table and application were flashed and verified on the backed-up Note4C. The device retains its pairing and passes Wi-Fi/time/authenticated-frame readiness. User has confirmed task pages and working voice chat.
 
-The HTTPS backend, native color frames, restricted model path, unchanged SOUL, speech service and Catthew Telegram connection pass release checks. A fresh synthetic English voice round trip returns text and 16 kHz speaker audio. **Physical color/audio/button acceptance and individually confirmed live household write/approval tests remain pending.** See [GATES.md](GATES.md) for the distinction between automatic and human evidence.
+The HTTPS backend, native color frames, restricted model path, unchanged SOUL, speech service and Catthew Telegram connection pass release checks. A fresh synthetic English voice round trip returns text and 16 kHz speaker audio. **Male-voice/latency confirmation, interruption/Mac-asleep acceptance and individually confirmed live household write/approval tests remain pending.** See [GATES.md](GATES.md) for the distinction between automatic and human evidence.
 
 ## Pair the already-flashed device
 
@@ -68,6 +68,12 @@ python3 -m tools.flash_note4c \
 ```
 
 Writing additionally requires `--write`, a private verified full factory backup, and matching physical device identity. Use `--initial-provision` only for the first layout installation; it erases the new NVS region. Updates preserve pairing unless explicitly erased. The original full 16 MiB image remains private and is never an Actions artifact.
+
+## Voice and latency
+
+The local Piper voice is Joe (`en_US-joe-medium`, male US-English, CC0 dataset). Whisper remains base.en int8. Active requests and completed text awaiting audio poll every500ms; idle/terminal requests poll every5seconds. A regression trace covers the completion boundary that previously caused a five-second wait for ready audio.
+
+`tools.voice_smoke` reports upload, audio-ready/download timings and status transitions without transcript or reply text. Current measured VPS audio readiness is about4.3–4.4seconds; this is not an end-to-end device latency measurement.
 
 ## VPS operation
 

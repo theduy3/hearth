@@ -19,6 +19,10 @@ Two findings were reported and independently confirmed resolved at `41c302d`:
 
 No concrete P1 or unrequested scope creep was established within reviewed paths. Coverage included native BWRY projection, navigation, audio cancellation/ACK, upload identity/retries, approvals, household scope and runtime credentials. Reviewer recheck found no introduced concrete bug in the correction.
 
+## Focused voice correction review
+
+A separate read-only reviewer inspected9fd1f98 and found no concrete P1/P2, privacy, lifecycle or contract bug. Matching requests use the polling policy independently of the completed-text processing flag, preserving500ms polling while speech is pending. The boundary regression checks the actual pure policy; it does not establish real network/task/playback timing. Joe selection and pinned-manifest validation were checked, and added timing output excludes transcripts/replies/tokens. SDK build,108 Linux host tests, hardware flash verification and network readiness were observed separately. User confirmation of perceived latency and the new voice remains necessary.
+
 ## Remaining acceptance
 
 Source review does not establish panel colors, microphone/speaker behavior, human gestures, real private notification/confirmation, shared live-record behavior or Mac-independent operation. Those remain explicit G5/G6 acceptance gates. No live family records were mutated by automated verification. The PR remains a draft and must not be merged automatically.

@@ -22,6 +22,16 @@ User reached voice stage but heard no reply; front hold made the indicator stead
 
 Opening USB restarts this board. The provisioning helper now holds one connection across identity/status polling rather than resetting between commands. The wizard now requires Wi-Fi, time and an authenticated fetched frame before voice, and supports `--wifi-only` repair. Regression tests cover persistent connection ownership, credential filtering and readiness failures. No credentials were printed or re-entered by the assistant, and no family records were changed. Current user action: run `./tools/setup-note4c.sh --wifi-only` privately and report DEVICE_NETWORK_VERIFIED or the exact non-secret error. Physical voice/navigation and G5/G6 remain unverified.
 
+## Physical progress and voice correction
+
+User privately repaired Wi-Fi; wait-online verified Wi-Fi/time/HTTP200 and an authenticated frame. User now sees tasks, confirms one full-color page refresh takes roughly15seconds and then stops, and says voice chat works. Microphone/upload/playback have real user evidence; interruption, Mac-asleep and live household write/approval tests still await confirmation. The user requests a male voice and reports approximately10seconds release-to-response latency.
+
+Joe male US-English medium (CC0 OHF-Voice dataset) was downloaded with pinned revision/checksums into `/opt/catthew-speech/models-joe`. The speech unit now uses Joe and the same base.en recognizer; existing Piper1.8 supports it. Previous unit is retained at `/root/catthew-deploy-backups/speech-before-joe.service`. Fresh synthetic audio remains valid16kHz. Measured public API audio readiness:4.279seconds before and4.415seconds after the voice switch; these samples do not prove end-to-end improvement.
+
+Firmware9fd1f98 fixes a concrete polling boundary: completed text with pending TTS formerly slept5seconds before checking audio. A deterministic replay test first failed (audio ready5.1seconds, first check10seconds); the corrected500ms active/pending-speech policy checks it by6seconds. All108 host tests pass, and independent focused source review found no concrete P1/P2, with hardware/timing limits stated. CI43374130066 passed SDK build and108 Linux tests at9fd1f981c10cf14038702185dbeeef35e3da802a. Its artifact was flashed without NVS erasure, all3regions verified, and wait-online again confirmed Wi-Fi/time/frame HTTP200. Private log: `builds/9fd1f98/flash.log`. Real-device latency after correction and male-voice preference still need user confirmation.
+
+Release check found unrelated live model drift: profile now selects openai-codex/gpt-6.1-terra, while the approved checkpoint specified gpt-6.1-sol. The assistant did not change this setting and has left it untouched pending user direction. SOUL and other VPS checks pass, including male voice selection; G4 must not be reported fully passing while the model differs. Timings above reflect the current profile, not an asserted Sol runtime.
+
 ## Architecture and reviewed behavior
 
 The VPS owns household data, English STT/TTS, agent calls and Unicode BWRY rendering. Device owns authenticated TLS, runtime NVS settings, buttons, exclusive codec ownership and immutable frame projection. It has separate display, audio, audio-download and network tasks; no recording/processing/clock-second panel refresh.
