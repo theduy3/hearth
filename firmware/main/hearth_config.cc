@@ -15,6 +15,7 @@ constexpr uint32_t kMagic = 0x43415431;
 struct Stored { uint32_t magic; HearthConfig config; };
 HearthConfig g_boot{};
 esp_err_t (*g_apply)(const HearthConfig&)=nullptr;
+void (*g_status)()=nullptr;
 
 template<size_t N> bool Bounded(const char (&value)[N]) {
     return strnlen(value, N) < N;
@@ -56,6 +57,8 @@ void Console(void*) {
             std::printf("CATTHEW_RESULT {\"ok\":true,\"configured\":%s,\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}\n",
                         HearthConfigComplete(g_boot) ? "true" : "false", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
             std::fflush(stdout);
+        } else if (std::strcmp(line, "CATTHEW_STATUS") == 0 && g_status) {
+            g_status();
         } else if (std::strncmp(line, "CATTHEW_CONFIG ", 15) == 0) {
             cJSON* document = cJSON_Parse(line + 15);
             HearthConfig staged{};
@@ -159,9 +162,10 @@ void HearthLoadId(const char* key, char* value, size_t capacity) {
     nvs_close(handle);
 }
 
-void HearthConfigStartConsole(const HearthConfig& config, esp_err_t (*apply)(const HearthConfig&)) {
+void HearthConfigStartConsole(const HearthConfig& config, esp_err_t (*apply)(const HearthConfig&), void (*status)()) {
     g_boot = config;
     g_apply = apply;
+    g_status = status;
     setvbuf(stdin, nullptr, _IONBF, 0);
     if(xTaskCreate(Console, "private_usb_setup", 6144, nullptr, 2, nullptr)!=pdPASS) esp_restart();
 }

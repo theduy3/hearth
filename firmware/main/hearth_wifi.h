@@ -4,5 +4,6 @@
 #include "hearth_config.h"
 esp_err_t HearthWifiStart(const HearthConfig& config);
 bool HearthWifiConnected();
+int HearthWifiDisconnectReason();
 bool HearthWifiSyncTime();
 #endif

@@ -9,11 +9,13 @@
 
 namespace {
 std::atomic<bool> g_connected{false};
+std::atomic<int> g_disconnect_reason{0};
 bool g_sntp_started = false;
-void Event(void*, esp_event_base_t base, int32_t id, void*) {
+void Event(void*, esp_event_base_t base, int32_t id, void* data) {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) esp_wifi_connect();
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         g_connected.store(false);
+        if(data) g_disconnect_reason=static_cast<wifi_event_sta_disconnected_t*>(data)->reason;
         esp_wifi_connect();
     }
     if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) g_connected.store(true);
@@ -45,6 +47,7 @@ esp_err_t HearthWifiStart(const HearthConfig& config) {
 }
 
 bool HearthWifiConnected() { return g_connected.load(); }
+int HearthWifiDisconnectReason() { return g_disconnect_reason.load(); }
 
 bool HearthWifiSyncTime() {
     if (!HearthWifiConnected()) return false;

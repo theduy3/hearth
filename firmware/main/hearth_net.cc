@@ -12,6 +12,7 @@
 
 namespace {
 std::atomic<bool> g_stopped{false};
+std::atomic<int> g_last_http_status{0};
 struct ResponseHeaders {
     HearthFrameInfo frame{};
     char type[80]{};
@@ -75,6 +76,7 @@ public:
         }
         if (!Alive()) return ESP_ERR_TIMEOUT;
         if (esp_http_client_fetch_headers(client)<0 || headers.invalid) return ESP_ERR_INVALID_RESPONSE;
+        g_last_http_status=Status();
         return Alive()?ESP_OK:ESP_ERR_TIMEOUT;
     }
     int Status() const { return esp_http_client_get_status_code(client); }
@@ -107,6 +109,7 @@ bool String(cJSON* object,const char* key,char* target,size_t capacity) {
 }
 
 void HearthNetStop() { g_stopped.store(true); }
+int HearthNetLastStatus() { return g_last_http_status.load(); }
 
 bool HearthFrameInfoValid(const HearthFrameInfo& info) {
     if (!HearthPageValid(info.page) || !HearthPageValid(info.next) || !HearthPageValid(info.previous) || strnlen(info.etag,sizeof(info.etag))!=66 || info.etag[0]!='"' || info.etag[65]!='"') return false;

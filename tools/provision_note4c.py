@@ -72,7 +72,7 @@ def exchange(port, line, timeout=12):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("info", "pair"))
+    parser.add_argument("mode", choices=("info", "status", "pair"))
     parser.add_argument("--port", default="/dev/cu.usbmodem101")
     args = parser.parse_args()
     info = exchange(args.port, "CATTHEW_INFO")
@@ -80,6 +80,13 @@ def main():
         raise RuntimeError("the attached device does not match the verified backup")
     if args.mode == "info":
         print(json.dumps({"ok": True, "configured": info.get("configured") is True}))
+        return
+    if args.mode == "status":
+        status = exchange(args.port, "CATTHEW_STATUS")
+        fields = {"ok", "wifi", "wifi_reason", "clock", "online", "capture_ready", "audio_busy", "display_busy", "processing", "queued_upload", "nav_steps", "capture_count", "capture_ms", "capture_result", "upload_count", "upload_result", "frame_count", "frame_result", "http_status"}
+        if not status["ok"] or not {"wifi", "clock", "frame_count"} <= status.keys():
+            raise RuntimeError("device status is unavailable")
+        print(json.dumps({key: value for key, value in status.items() if key in fields and type(value) in (int, bool)}))
         return
     fields = sys.stdin.buffer.read(2048).split(b"\0")
     if len(fields) != 3 or fields[-1] != b"":

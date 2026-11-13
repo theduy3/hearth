@@ -15,7 +15,7 @@ esp_err_t HearthConfigLoad(HearthConfig* config);
 esp_err_t HearthConfigSave(const HearthConfig& config);
 bool HearthConfigComplete(const HearthConfig& config);
 // Raw stdin protocol, no REPL/input echo; saved settings apply on reboot only.
-void HearthConfigStartConsole(const HearthConfig& config, esp_err_t (*apply)(const HearthConfig&));
+void HearthConfigStartConsole(const HearthConfig& config, esp_err_t (*apply)(const HearthConfig&), void (*status)());
 esp_err_t HearthStoreBlob(const char* key, const void* data, size_t size);
 esp_err_t HearthLoadBlob(const char* key, void* data, size_t size);
 esp_err_t HearthStoreId(const char* key, const char* value);

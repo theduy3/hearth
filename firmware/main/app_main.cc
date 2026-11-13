@@ -50,6 +50,8 @@ std::atomic<bool> g_audio_stopped{false},g_display_stopped{false},g_sleep_reques
 std::atomic<uint32_t> g_audio_generation{0};
 std::atomic<bool> g_record{false},g_capture_ready{false},g_audio_busy{false},g_display_busy{false},g_online{false},g_clock_ready{false},g_processing{false},g_shutdown{false},g_cache_safe{false};
 std::atomic<int64_t> g_error_until{0};
+std::atomic<unsigned> g_capture_count{0},g_capture_ms{0},g_upload_count{0},g_frame_count{0};
+std::atomic<int> g_capture_result{-1},g_upload_result{-1},g_frame_result{-1};
 uint32_t g_capture_generation=0;
 QueueHandle_t g_audio_commands=nullptr,g_pcm=nullptr;
 
@@ -201,7 +203,9 @@ void AudioTask(void*) {
             g_capture_generation=g_audio_generation.load();
             xQueueReset(g_pcm);
             HearthClip clip{};
+            ++g_capture_count;
             esp_err_t result=HearthRecordWhile(&g_board,Held,30000,&clip,CaptureReady);
+            g_capture_result=result;g_capture_ms=clip.ms;
             g_capture_ready=false;g_audio_busy=false;audio_guard.unlock();
             if(result==ESP_OK && !g_shutdown.load() && g_capture_generation==g_audio_generation.load()) {
                 auto* upload=new(std::nothrow) Upload;
@@ -263,7 +267,10 @@ void NetworkTask(void*) {
             for(int attempt=0;attempt<3 && !g_shutdown.load() && esp_timer_get_time()-upload->created<120000000;++attempt) {
                 HearthDeviceStatus existing{};
                 if(HearthFetchDevice(g_config,&existing)==ESP_OK && existing.present && !std::strcmp(existing.client,upload->client)) {Copy(request,sizeof(request),existing.id);accepted=true;break;}
-                if(HearthUpload(g_config,upload->clip,upload->client,request)==ESP_OK) {accepted=true;break;}
+                ++g_upload_count;
+                esp_err_t sent=HearthUpload(g_config,upload->clip,upload->client,request);
+                g_upload_result=sent;
+                if(sent==ESP_OK) {accepted=true;break;}
                 vTaskDelay(pdMS_TO_TICKS(1000*(attempt+1)));
             }
             if(accepted) {
@@ -313,7 +320,9 @@ void NetworkTask(void*) {
         }
         if(first || nav!=fetched_nav || now>=next_frame) {
             Frame* frame=AllocateFrame();bool unchanged=false;
-            if(frame && HearthFetchFrame(g_config,desired,etag,frame->pixels,&frame->info,&unchanged)==ESP_OK) {
+            esp_err_t fetched=ESP_ERR_NO_MEM;
+            if(frame) {++g_frame_count;fetched=HearthFetchFrame(g_config,desired,etag,frame->pixels,&frame->info,&unchanged);g_frame_result=fetched;}
+            if(frame && fetched==ESP_OK) {
                 g_online=true;failures=0;
                 {
                     std::lock_guard<std::mutex> lock(g_mutex);
@@ -329,6 +338,14 @@ void NetworkTask(void*) {
         vTaskDelay(pdMS_TO_TICKS(50));
     }
     vTaskDelete(nullptr);
+}
+void PrintStatus() {
+    bool queued;int steps;
+    {std::lock_guard<std::mutex> lock(g_mutex);queued=g_upload!=nullptr;steps=g_steps;}
+    std::printf("CATTHEW_RESULT {\"ok\":true,\"wifi\":%d,\"wifi_reason\":%d,\"clock\":%d,\"online\":%d,\"capture_ready\":%d,\"audio_busy\":%d,\"display_busy\":%d,\"processing\":%d,\"queued_upload\":%d,\"nav_steps\":%d,\"capture_count\":%u,\"capture_ms\":%u,\"capture_result\":%d,\"upload_count\":%u,\"upload_result\":%d,\"frame_count\":%u,\"frame_result\":%d,\"http_status\":%d}\n",
+        int(HearthWifiConnected()),HearthWifiDisconnectReason(),int(g_clock_ready.load()),int(g_online.load()),int(g_capture_ready.load()),int(g_audio_busy.load()),int(g_display_busy.load()),int(g_processing.load()),int(queued),steps,
+        g_capture_count.load(),g_capture_ms.load(),g_capture_result.load(),g_upload_count.load(),g_upload_result.load(),g_frame_count.load(),g_frame_result.load(),HearthNetLastStatus());
+    std::fflush(stdout);
 }
 void Quiesce() {
     g_shutdown=true;g_record=false;++g_audio_generation;
@@ -365,7 +382,7 @@ extern "C" void app_main() {
         StartTask(AudioReader,"reply_network",8192,3);
         StartTask(NetworkTask,"device_network",12288,3);
     }
-    HearthConfigStartConsole(g_config,ApplyConfig);
+    HearthConfigStartConsole(g_config,ApplyConfig,PrintStatus);
     for(;;) {
         ZectrixButtonEvent event{};
         if(g_board.WaitButton(&event,pdMS_TO_TICKS(20)) && !g_shutdown.load()) {
