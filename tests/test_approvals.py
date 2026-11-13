@@ -72,5 +72,17 @@ class ApprovalTests(unittest.TestCase):
             self.store.propose("other", "delete", {**self.payload, "etag": "*"}, {})
 
 
+    def test_invalid_edit_intervals_are_rejected_before_a_proposal_exists(self):
+        for start, end in [
+            ("2026-11-13", "2026-11-13"),
+            ("2026-11-14", "2026-11-13"),
+            ("2026-11-13", "2026-11-14T10:00:00-08:00"),
+            ("2026-11-13T11:00:00-08:00", "2026-11-13T10:00:00-08:00"),
+        ]:
+            with self.subTest(start=start, end=end), self.assertRaises(ValueError):
+                self.store.propose("invalid-edit", "edit", {**self.payload, "title": "Family event", "start": start, "end": end}, {})
+            self.assertEqual(self.store.pending(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

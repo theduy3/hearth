@@ -22,7 +22,7 @@ Preserve the last frame during outages. Its reserved footer rectangle x304..383/
 
 `POST /v1/utterance` accepts mono signed16bit little-endian16kHz WAV up to30seconds. Set `Content-Type: audio/wav` and a stable `X-Hearth-Request-Id`. Preserve that upload ID and identical bytes across transport retries; conflicting reuse is409, capacity is429. Acceptance is202 with `request_id`. This is not a successful household action.
 
-`GET /v1/requests/<32hexid>` exposes durable status. States: queued, stt, processing, completed, failed, uncertain. Never automatically resubmit uncertain agent work. The device can reconcile a lost acceptance response using the compact request's `client_id`.
+`GET /v1/requests/<32hexid>` exposes durable status. States: queued, transcribing, processing, completed, failed, uncertain. Never automatically resubmit uncertain agent work. The device can reconcile a lost acceptance response using the compact request's `client_id`.
 
 When completed with speech ready, show `reply:0` and independently fetch `/v1/requests/<id>/audio`. It returns a canonical44-byte PCM WAV header followed by mono16kHz signed16bit little-endian PCM, at most4MiB total. Validate header, length, rate, alignment and exact completion; preserve split samples across network reads. One audio task exclusively owns the codec. A hold cancels playback before capture; a separate bounded audio network reader must not delay capture readiness.
 

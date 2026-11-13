@@ -24,6 +24,17 @@ def _time(value):
     return {"dateTime": value, "timeZone": "America/Vancouver"}
 
 
+def event_interval(start, end):
+    """Validate one all-day or timezone-aware interval before proposing/writing."""
+    begin, finish = _time(start), _time(end)
+    if ("date" in begin) != ("date" in finish):
+        raise ValueError("event time types must match")
+    if (date.fromisoformat(end) <= date.fromisoformat(start) if "date" in begin
+            else datetime.fromisoformat(end) <= datetime.fromisoformat(start)):
+        raise ValueError("event end must follow start")
+    return begin, finish
+
+
 def _etag(value):
     if not isinstance(value, str) or not re.fullmatch(r'"[^"\r\n]+"', value):
         raise ValueError("a single concrete event etag is required")
@@ -88,12 +99,7 @@ class FamilyCalendar:
             raise ValueError("invalid stable event ID")
         if not isinstance(title, str) or not title.strip() or len(title) > 300:
             raise ValueError("event title is empty or too long")
-        begin, finish = _time(start), _time(end)
-        if ("date" in begin) != ("date" in finish):
-            raise ValueError("event time types must match")
-        if (date.fromisoformat(end) <= date.fromisoformat(start) if "date" in begin
-                else datetime.fromisoformat(end) <= datetime.fromisoformat(start)):
-            raise ValueError("event end must follow start")
+        begin, finish = event_interval(start, end)
         fingerprint = hashlib.sha256(json.dumps([title, start, end]).encode()).hexdigest()
         body = {"id": event_id, "summary": title, "start": begin, "end": finish,
                 "extendedProperties": {"private": {"catthewTerminal": fingerprint}}}
@@ -113,12 +119,7 @@ class FamilyCalendar:
         """Called only by the private approval surface after single-use consent."""
         if not event_id or not etag or not title or len(title) > 300:
             raise ValueError("event ID, current etag and title are required")
-        begin, finish = _time(start), _time(end)
-        if ("date" in begin) != ("date" in finish):
-            raise ValueError("event time types must match")
-        if (date.fromisoformat(end) <= date.fromisoformat(start) if "date" in begin
-                else datetime.fromisoformat(end) <= datetime.fromisoformat(start)):
-            raise ValueError("event end must follow start")
+        begin, finish = event_interval(start, end)
         request = self.service.events().patch(calendarId=self.calendar_id, eventId=event_id,
                                              body={"summary": title, "start": begin, "end": finish}, sendUpdates="none")
         request.headers["If-Match"] = _etag(etag)

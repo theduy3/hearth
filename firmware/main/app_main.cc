@@ -286,7 +286,7 @@ void NetworkTask(void*) {
                     bool failed=!std::strcmp(status.status,"failed") || !std::strcmp(status.status,"uncertain");
                     bool speech_ready=!std::strcmp(status.speech,"ready");
                     bool speech_failed=!std::strcmp(status.speech,"failed");
-                    if(failed || (completed && (speech_ready || speech_failed || !std::strcmp(status.speech,"delivered") || !std::strcmp(status.speech,"expired")))) {
+                    if(failed || completed) {
                         g_processing=false;
                         if(std::strcmp(g_answer_shown,status.id)) {Copy(g_desired,sizeof(g_desired),"reply:0");g_steps=0;++g_nav;Copy(g_answer_shown,sizeof(g_answer_shown),status.id);}
                         if(failed || speech_failed) Error();

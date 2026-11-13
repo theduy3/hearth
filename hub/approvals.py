@@ -11,7 +11,7 @@ import time
 import uuid
 from pathlib import Path
 
-from hub.calendar import _etag, _time
+from hub.calendar import _etag, event_interval
 
 
 class ApprovalStore:
@@ -58,8 +58,7 @@ class ApprovalStore:
             raise ValueError("invalid proposal text")
         _etag(payload["etag"])
         if kind == "edit":
-            _time(payload["start"])
-            _time(payload["end"])
+            event_interval(payload["start"], payload["end"])
         encoded = json.dumps(payload, sort_keys=True)
         fingerprint = hashlib.sha256((kind + encoded).encode()).hexdigest()
         preview_text = json.dumps(preview, default=str)
