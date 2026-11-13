@@ -13,7 +13,8 @@ class Note4CProtocolTests(unittest.TestCase):
                             "-I" + str(root / "firmware/main"),
                             str(root / "firmware/main/hearth_protocol.cc"),
                             str(root / "tests/note4c_protocol_test.cc"), "-o", str(binary)], check=True)
-            result = subprocess.run([str(binary)], text=True, capture_output=True, check=True)
+            result = subprocess.run([str(binary)], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("NOTE4C_PROTOCOL_OK", result.stdout)
 
 

@@ -26,4 +26,5 @@ private:
 void HearthWavHeader(uint8_t* header, uint32_t pcm_bytes);
 bool HearthPageValid(const char* page);
 bool HearthRequestIdValid(const char* id);
+uint32_t HearthStatusPollMs(const char* state, const char* speech);
 #endif

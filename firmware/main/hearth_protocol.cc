@@ -12,6 +12,12 @@ void Put16(uint8_t* p, uint16_t value) { p[0] = value; p[1] = value >> 8; }
 void Put32(uint8_t* p, uint32_t value) { for (int i = 0; i < 4; ++i) p[i] = value >> (i * 8); }
 }
 
+uint32_t HearthStatusPollMs(const char* state, const char* speech) {
+    bool working=state && (!std::strcmp(state,"queued") || !std::strcmp(state,"transcribing") || !std::strcmp(state,"processing"));
+    bool waiting_audio=state && speech && !std::strcmp(state,"completed") && !std::strcmp(speech,"pending");
+    return working || waiting_audio ? 500 : 5000;
+}
+
 HearthPcmDecoder::HearthPcmDecoder(size_t length, HearthPcmConsumer consumer, void* context)
     : length_(length), consumer_(consumer), context_(context) {
     valid_ = length > 44 && length <= kHearthMaxAudioBytes && consumer != nullptr;

@@ -35,5 +35,19 @@ int main() {
     assert(HearthPageValid("tasks:3"));assert(!HearthPageValid("today&token=other"));assert(!HearthPageValid(nullptr));
     assert(HearthRequestIdValid("0123456789abcdef0123456789abcdef"));
     assert(!HearthRequestIdValid("../../approval/token"));
+    // Replay the latency boundary: text finishes just before a poll, but
+    // its WAV becomes ready just afterwards. Completion must not create
+    // a five-second blind spot before the next audio check.
+    unsigned first_audio_check=0;
+    for(unsigned elapsed=0;elapsed<=12000;) {
+        const char* state=elapsed<4800?"processing":"completed";
+        const char* speech=elapsed<5100?"pending":"ready";
+        if(elapsed>=5100) {first_audio_check=elapsed;break;}
+        elapsed+=HearthStatusPollMs(state,speech);
+    }
+    assert(first_audio_check>=5100 && first_audio_check<=6000);
+    assert(HearthStatusPollMs("completed","delivered")==5000);
+    assert(HearthStatusPollMs("failed","pending")==5000);
+    assert(HearthStatusPollMs(nullptr,nullptr)==5000);
     std::puts("NOTE4C_PROTOCOL_OK");
 }

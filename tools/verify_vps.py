@@ -66,6 +66,8 @@ def main():
     remote = json.loads(result.stdout)
     services = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "bluehost", "systemctl", "is-active", "catthew-terminal.service", "catthew-speech.service"], text=True, capture_output=True, timeout=15)
     checks["supervised_services_active"] = services.returncode == 0 and services.stdout.split() == ["active", "active"]
+    voice = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "bluehost", "systemctl", "show", "catthew-speech.service", "-p", "ExecStart", "--value"], text=True, capture_output=True, timeout=15)
+    checks["male_voice_selected"] = voice.returncode == 0 and "/models-joe/voices/en/en_US/joe/medium/en_US-joe-medium.onnx" in voice.stdout
     checks["soul_unchanged"] = remote.pop("soul_sha256") == args.soul_sha256
     checks.update(remote)
     print(json.dumps(checks, sort_keys=True))

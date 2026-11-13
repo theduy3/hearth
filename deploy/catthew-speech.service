@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 DynamicUser=yes
 WorkingDirectory=/opt/catthew-speech/app
-ExecStart=/opt/catthew-speech/venv/bin/python -m hub.speech_server --whisper-model /opt/catthew-speech/models-base/whisper --voice-model /opt/catthew-speech/models-base/voices/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx
+ExecStart=/opt/catthew-speech/venv/bin/python -m hub.speech_server --whisper-model /opt/catthew-speech/models-joe/whisper --voice-model /opt/catthew-speech/models-joe/voices/en/en_US/joe/medium/en_US-joe-medium.onnx
 Environment=OMP_NUM_THREADS=2
 Environment=OPENBLAS_NUM_THREADS=1
 Environment=HF_HUB_OFFLINE=1

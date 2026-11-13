@@ -284,11 +284,13 @@ void NetworkTask(void*) {
         if(*ack && HearthAck(g_config,ack)==ESP_OK) {std::lock_guard<std::mutex> lock(g_mutex);if(!std::strcmp(ack,g_ack)) g_ack[0]=0;}
         int64_t now=esp_timer_get_time();
         if(now>=next_status) {
+            uint32_t poll_ms=g_processing.load()?1000:5000;
             HearthDeviceStatus status{};
             if(HearthFetchDevice(g_config,&status)==ESP_OK) {
                 failures=0;g_online=true;
                 std::lock_guard<std::mutex> lock(g_mutex);
                 if(status.present && !std::strcmp(status.client,g_client)) {
+                    poll_ms=HearthStatusPollMs(status.status,status.speech);
                     bool completed=!std::strcmp(status.status,"completed");
                     bool failed=!std::strcmp(status.status,"failed") || !std::strcmp(status.status,"uncertain");
                     bool speech_ready=!std::strcmp(status.speech,"ready");
@@ -306,7 +308,7 @@ void NetworkTask(void*) {
                     if(completed && speech_ready && !std::strcmp(status.id,g_played)) Copy(g_ack,sizeof(g_ack),status.id);
                 }
             } else if(++failures>=3) g_online=false;
-            next_status=now+(g_processing.load()?1000000:5000000);
+            next_status=now+static_cast<int64_t>(poll_ms)*1000;
         }
         char desired[33]{},etag[67]{};uint32_t nav=0;
         {
