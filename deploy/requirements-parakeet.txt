@@ -1,0 +1,4 @@
+# CPU runtime wheels, verified against PyPI0.4.2 release metadata.
+# Install separately with --only-binary=:all: --require-hashes.
+transcribe-cpp==0.4.2 --hash=sha256:dbbdef5febf1f786730ef1bb038f732cd2264b544aa1177ff335ef061741bb2e
+transcribe-cpp-native==0.4.2 --hash=sha256:4010dba73291b92b9cb70ca2673ed7e9ea1d4f8a9029efb942d5de0cb0900785

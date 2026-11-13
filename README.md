@@ -1,85 +1,106 @@
-# Hearth
+# zectrix-note4c-catthew
 
-Hearth turns a ZECTRIX NOTE4 into a shared household memory board. Speak at the
-fridge, and the e-paper shows the resulting notes, shopping list, meal plan,
-weather, and alarms. A dedicated Hermes agent reads the current board and uses
-Hearth tools to file each request; the hub keeps the board and sends updates to
-the device.
+A four-color household voice terminal for the existing Catthew Hermes profile. The Zectrix Note4C handles buttons, microphone, speaker and display. Bluehost runs Hermes, speech recognition, speech synthesis, household tools and screen rendering, so the Mac is needed only for setup and development.
 
-![Today screen with notes and Buy/Menu preview](docs/img/01-today.png)
+This fork targets the **ESP32-S3 N16R8 Note4C with a real 400 × 300 black/white/red/yellow panel**. Firmware contains no Wi-Fi password, device token or model credential.
 
-Screens from the current demo board, rendered by the host simulator using the
-firmware's canvas and screen code.
+## Controls
 
-- **Today:** a prominent RTC-backed clock, local date and weather, important
-  notes, the next alarm, and compact Buy/Menu previews.
-- **Buy and Notes:** shopping, chores, packing, and reminders with owners,
-  check marks, and voice or button deletion.
-- **Menu:** breakfast, lunch, and dinner under each weekday.
-- **Alarms and timers:** say “alarm at 7 for school” or “30 second timer.” Both
-  ring once on the NOTE4 and disappear after firing.
-- **Responsive recording:** hold the front button to speak. Upload and filing
-  happen in the background, so pages remain usable and more requests can queue.
+- **Hold the front button:** interrupt reply playback and record once the indicator turns steady.
+- **Release:** submit the recording. The maximum recording is 30 seconds.
+- **Short-press the front button or Down:** advance a page.
+- **Short-press Up:** return to the previous page.
+- **Hold Down:** stop audio/display work safely and enter deep sleep. The front button wakes the device.
 
-| Buy | Menu |
-|---|---|
-| ![Demo shopping list with checked items](docs/img/02-buy.png) | ![Demo weekday meal plan](docs/img/03-menu.png) |
+There are exactly two screens: **Tasks** and **Grocery Shopping**. Tasks shows up to five tasks due **today in America/Vancouver**, with an overflow count. Grocery records, overdue work, undated work and future work do not appear there; hidden tasks remain in the shared records until completed. Grocery Shopping shows only needed item names, up to seven at once; its empty list has no placeholder instruction. Purchased items disappear. Ask Catthew by voice to add groceries, change quantities or check off purchases. Asking for tasks refreshes and opens Tasks; modifying groceries refreshes and opens Grocery Shopping. Replies play through the speaker, and unrelated conversation leaves the selected screen alone. Either navigation direction toggles between the two screens. Hidden calendar/notes or reply-text changes do not repaint them.
 
-| Notes | Pulse |
-|---|---|
-| ![Demo household notes with owners and check marks](docs/img/04-notes.png) | ![Device connection, battery, and last-heard status](docs/img/05-pulse.png) |
+The panel uses full refreshes; the user observed about15seconds for a page change, with flashing stopping once it settles. Navigation presses during a refresh are combined; recording and reply playback run independently. Recording and processing use the indicator rather than additional screen refreshes. An offline badge distinguishes a cached page from current data.
 
-Hold the front button to record; after release, the request files in the
-background and the board updates:
+## Household scope
 
-| Listening | Filing | Updated |
-|---|---|---|
-| ![Listening status on Today](docs/img/06-listen.png) | ![Filing status on Today](docs/img/07-filing.png) | ![Buy list after voice removal](docs/img/08-removed.png) |
+Catthew keeps its existing SOUL. The user-selected model is `openai-codex` / `gpt-6.1-terra`; setup and release checks preserve that choice. Note4C has a separate persistent conversation while sharing the same underlying records with Telegram and CLI.
 
-See the [developer reel](promo/hearth-developer-reel.mp4) and its
-[voiceover transcript](promo/reel-transcript.md) for an animated walkthrough.
+- Calendar: **Kittyggup Family**, timezone **America/Vancouver**.
+- Tasks: exact `catthew` tag in existing `Tasks/tasks`, `Tasks/bugs` and `Tasks/ideas`.
+- Reference notes: exact `kittyggup` tag anywhere in the vault.
+- Calendar edits/deletions create proposals. A private, expiring, one-use human confirmation authorizes the exact version and change. Device buttons cannot approve changes.
 
-## Flash and use
+The household MCP exposes scoped record operations. It does not expose a shell, arbitrary paths, calendar selection or an approval/apply tool to the model. The terminal checks the native Hermes tool policy before every turn and refuses unexpected capabilities.
 
-You need a **NOTE4 Developer Kit** (ESP32-S3 N16R8, not NOTE4C), ESP-IDF v6.1,
-Hermes on the hub machine or an SSH host, and a reachable speech-to-text service.
-The hub and NOTE4 must share a network.
+## Current verified checkpoint
 
-1. Copy `.env.example` to `.env` and set the STT URL, hub LAN URL, and weather
-   coordinates. Choose `HEARTH_HERMES_METHOD=local` or `ssh`; for SSH, set
-   `HEARTH_HERMES_SSH_HOST`. The profile directory and command used to select
-   the profile are also configurable there. Copy
-   `firmware/sdkconfig.defaults.local.example` to
-   `firmware/sdkconfig.defaults.local`, then set Wi-Fi and the same hub LAN URL.
-2. Preview, install the dedicated Hermes profile, and start the hub:
+Installed firmware `09d1fa2e92dc437be0192ca489561b47c5a9d627` built with the pinned ESP-IDF 6.1 toolchain in [Actions run 43392558966](https://github.com/theduy3/zectrix-note4c-catthew/actions/runs/43392558966). Its bootloader, partition table and application were identity-checked, flashed and verified on the backed-up Note4C with pairing retained. Wi-Fi/time/authenticated-frame readiness passed. Backend `b0d61ce` and all137tests also passed [run43397344604](https://github.com/theduy3/zectrix-note4c-catthew/actions/runs/43397344604). Earlier user evidence confirmed the full-color settling waveform and voice; current physical request-directed navigation remains part of acceptance.
 
-   ```bash
-   ./tools/install_hearth_profile.sh --dry-run
-   ./tools/install_hearth_profile.sh
-   python3 -m hub --host 0.0.0.0 --port 8790
-   ```
+The HTTPS backend, native color frames, restricted model path, unchanged SOUL, speech service and Catthew Telegram connection pass release checks. A fresh synthetic English voice round trip returns text and 16 kHz speaker audio. **Male-voice/latency confirmation, interruption/Mac-asleep acceptance and individually confirmed live household write/approval tests remain pending.** See [GATES.md](GATES.md) for the distinction between automatic and human evidence.
 
-3. Connect the NOTE4 by USB and flash:
+## Pair the already-flashed device
 
-   ```bash
-   ./tools/flash_hearth.sh clean /dev/ttyACM0
-   ```
+On the approved Mac, with the Note4C connected by USB:
 
-   `clean` adds no sample data. A fresh hub board starts empty; reflashing keeps
-   your existing board. For a showcase with shopping, all note kinds, a full
-   week of meals, and an alarm, use `./tools/flash_hearth.sh demo /dev/ttyACM0`.
-   Demo replaces the current hub board and first saves it under `backups/`.
-   Weather comes from the hub's configured location.
+```bash
+./tools/setup-note4c.sh
+```
 
-Short-click the **front button** to cycle Today, Buy, Menu, Notes, and Pulse.
-Click **up/down** to move through items; hold **up** to check or uncheck the
-selected item, or hold **down** to delete it. Hold the **front button** (about
-half a second) while speaking, then release to send the recording.
-Idle standby, the wake-up budget, and the poster poll schedule live in
-[battery and power](docs/POWER.md).
+The wizard checks the four labeled calibration patches before pairing. Enter the 2.4 GHz network name and hidden Wi-Fi password in that terminal. The helper verifies the device against the private backup record and retrieves its dedicated device token privately through the existing `bluehost` SSH alias. Credentials are sent over USB into device NVS; they are not written to a local `.env`, printed, or committed.
 
-Wi-Fi and hub settings can also be changed over the 115200-baud USB console
-with `hearth-set` and `hearth-save`; see [device setup](docs/VOICE.md).
-For factory image backup or restore, see [factory flash guide](docs/FACTORY_FLASH.md).
+It then guides a read-only English greeting, page navigation, playback interruption and a reply while the Mac sleeps and the tablet uses wall power. A fresh VPS job and full-playback acknowledgement are checked for voice tests. Physical acceptance evidence stays under `$HOME/.local/share/catthew-note4c/`.
 
-MIT licensed; see [LICENSE](LICENSE).
+The wizard verifies Wi-Fi, time synchronization and a successful authenticated frame before advancing to voice. If it reports Wi-Fi reason201, the configured network was not found. Retry only private Wi-Fi pairing with `./tools/setup-note4c.sh --wifi-only`, using the exact reachable2.4GHz network name. USB status checks hold one connection open because opening USB restarts this board; do not run them during a recording.
+
+If a color, audio or gesture check fails, stop at that stage and report the observed behavior. Live family write tests require their separately confirmed record and cleanup; pairing does not authorize test calendar/task mutations.
+
+## Build and verify
+
+Host tests need Python and [requirements.txt](requirements.txt):
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Native C++ tests compile the actual e-paper driver against trace stubs and check BWRY byte order, command sequencing, power removal, timeout and retry. The PCM decoder tests fragmented WAV input, format/length limits and cancellation. Backend tests cover source scope, concurrency, durable requests, uncertain outcomes, expiry, private approvals, Unicode projection and HTTP boundaries.
+
+[The firmware workflow](.github/workflows/firmware.yml) pins the ESP-IDF 6.1 container by digest and emits a checksummed manifest with build artifacts. It requires no credentials. Avoid installing a large SDK on the Mac or compiling on the production VPS.
+
+Verify a downloaded artifact before writing. Pass the directory containing `note4c-manifest.json`:
+
+```bash
+python3 -m tools.flash_note4c \
+  --artifact-dir /private/path/to/note4c-firmware/build \
+  --expect-commit FULL_COMMIT_SHA
+```
+
+Writing additionally requires `--write`, a private verified full factory backup, and matching physical device identity. Use `--initial-provision` only for the first layout installation; it erases the new NVS region. Updates preserve pairing unless explicitly erased. The original full 16 MiB image remains private and is never an Actions artifact.
+
+## Voice and latency
+
+The local Piper voice is Joe (`en_US-joe-medium`, male US-English, CC0 dataset). Whisper remains base.en int8. The requested731MB Parakeet Unified Q8 candidate was prepared and tested but is inactive: it measured slower and used more resident memory on this VPS. The user chose the lowest measured latency, so Whisper is retained. See [measurements and decision](docs/PARAKEET-BENCHMARK.md). Active requests and completed text awaiting audio poll every500ms; idle/terminal requests poll every5seconds. A regression trace covers the completion boundary that previously caused a five-second wait for ready audio.
+
+`tools.voice_smoke` reports upload, audio-ready/download timings and status transitions without transcript or reply text. Measured VPS audio readiness for the synthetic greeting was about4.3–4.4seconds. A later read-only task query including record access and page selection took22.4seconds. These are different workloads and neither measures end-to-end physical-device latency.
+
+## VPS operation
+
+The production endpoint is `https://zectrix.theduy.cloud`. Caddy terminates TLS; terminal and speech listeners remain loopback-only. The terminal is a supervised systemd service using `deploy/run-terminal.sh` to enter the Hermes container namespaces while retaining its own service cgroup. Do not replace that daemon launcher with `docker exec`: stopping its client can leave the server running stale code.
+
+`tools/configure_catthew.py` performs backed-up profile configuration. Device/API credentials belong in private service state, not this repository. Deployment units and the dedicated Caddy site are under [deploy/](deploy/). Existing unrelated proxy routes and Hermes profiles remain outside this change.
+
+Release checks:
+
+```bash
+python3 tools/verify_vps.py --soul-sha256 EXPECTED_SOUL_SHA256
+ssh bluehost 'docker exec --user 1500 \
+  --workdir /home/hermes/.hermes/catthew-terminal hermes \
+  /home/hermes/.hermes/hermes-agent/venv/bin/python -m tools.voice_smoke'
+```
+
+The voice smoke test uses a synthetic greeting and creates no family records. After an intentional gateway reload, allow its messaging adapters to initialize before checking `/p/catthew/health`; startup can take minutes.
+
+## Design, protocol and delivery
+
+- [Approved design and delivery plan](docs/CATTHEW-NOTE4C-PLAN.md)
+- [Implementation ledger](docs/CATTHEW-IMPLEMENTATION-PROGRESS.md)
+- [Device protocol and native pixel format](docs/NOTE4C-PROTOCOL.md)
+- [Acceptance gates](GATES.md)
+- [Standards and specification source review](docs/NOTE4C-REVIEW.md)
+- [Draft PR #1](https://github.com/theduy3/zectrix-note4c-catthew/pull/1), with no automatic merge
+
+Unmodified DejaVu fonts and their attribution are in [assets/fonts/](assets/fonts/). Speech dependencies and pinned model provenance are maintained separately by the speech preparation tools; the Piper engine is GPLv3 and is not vendored into the firmware.

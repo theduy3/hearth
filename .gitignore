@@ -20,31 +20,17 @@ __pycache__/
 .pytest_cache/
 hub/.venv/
 
-# Simulator output
-sim/out/
-sim/out/hearth-sim
-*.pyc
-
 # Rebuildable reel frames and intermediate audio.
 promo/
-
-# Host test binaries
-tests/test_hearth_model
 
 # Session dumps from the coding agent, never the product.
 agent-tools/
 
-# Live board if copied into the tree. Canonical path is
-# ~/.local/share/hearth/board.json.
-data/board.json
-
 # Secrets and local config
 .env
 .env.*
-!.env.example
 secrets/
 *.pem
-board.local.json
 
 
 # OS

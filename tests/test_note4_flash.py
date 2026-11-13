@@ -153,6 +153,22 @@ class SafetyTests(unittest.TestCase):
                 self.assertTrue(all("write-flash" not in call.args[3] for call in run.call_args_list))
                 self.assertIn("dry-run", buf.getvalue())
 
+    def test_dump_keeps_firmware_stopped_until_flash_verification(self) -> None:
+        identity = "MAC:                28:84:85:32:07:e0\nDetected flash size: 16MB\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "full.bin"
+            calls = []
+            def run(esptool, port, baud, args, **kwargs):
+                calls.append((args, kwargs))
+                if args[0] == "read-flash":
+                    with image.open("wb") as handle:
+                        handle.truncate(nf.FLASH_SIZE)
+                return identity
+            with mock.patch.object(nf, "find_esptool", return_value=Path("/bin/true")), mock.patch.object(nf, "run_esptool", side_effect=run):
+                self.assertEqual(nf.main(["--image", str(image), "--expect-mac", "28:84:85:32:07:e0", "dump", "--no-mirror"]), 0)
+            read = next(kwargs for args, kwargs in calls if args[0] == "read-flash")
+            self.assertEqual(read.get("after"), "no-reset")
+
     def test_dump_refuses_wrong_mac(self) -> None:
         identity = (
             "MAC:                aa:bb:cc:dd:ee:ff\n"

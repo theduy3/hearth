@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import struct
+import wave
 
 PCM_RATE = 16000
 PCM_WIDTH = 2
@@ -35,34 +37,23 @@ def wrap_pcm16(pcm: bytes, rate: int = PCM_RATE) -> bytes:
 
 
 def parse_wav(blob: bytes) -> tuple[bytes, int]:
-    """Return (pcm16le, sample_rate) from a PCM WAV. Rejects non-PCM."""
-    if len(blob) < 44 or blob[0:4] != b"RIFF" or blob[8:12] != b"WAVE":
+    """Read complete PCM16 mono WAV using the standard library's chunk parser."""
+    if len(blob) < 44 or blob[:4] != b"RIFF" or blob[8:12] != b"WAVE":
         raise ValueError("not a RIFF/WAVE file")
-    offset = 12
-    fmt = None
-    data = None
-    while offset + 8 <= len(blob):
-        chunk_id = blob[offset : offset + 4]
-        (chunk_size,) = struct.unpack_from("<I", blob, offset + 4)
-        start = offset + 8
-        payload = blob[start : start + chunk_size]
-        if chunk_id == b"fmt ":
-            fmt = payload
-        elif chunk_id == b"data":
-            data = payload
-        offset = start + chunk_size
-        if chunk_size % 2:
-            offset += 1
-    if fmt is None or data is None:
-        raise ValueError("WAVE missing fmt or data")
-    audio_format, channels, rate, _byte_rate, _align, bits = struct.unpack_from(
-        "<HHIIHH", fmt
-    )
-    if audio_format != 1 or channels != 1 or bits != 16:
-        raise ValueError(
-            f"need PCM16 mono, got format={audio_format} ch={channels} bits={bits}"
-        )
-    return data, rate
+    if struct.unpack_from("<I", blob, 4)[0] + 8 != len(blob):
+        raise ValueError("WAVE length does not match its header")
+    try:
+        with wave.open(io.BytesIO(blob), "rb") as reader:
+            if reader.getnchannels() != 1 or reader.getsampwidth() != 2 or reader.getcomptype() != "NONE":
+                raise ValueError("need uncompressed PCM16 mono WAV")
+            rate = reader.getframerate()
+            frames = reader.getnframes()
+            pcm = reader.readframes(frames + 1)
+            if not frames or len(pcm) != frames * 2:
+                raise ValueError("truncated or misaligned PCM16 data")
+            return pcm, rate
+    except (wave.Error, EOFError, struct.error) as error:
+        raise ValueError("invalid PCM16 mono WAV") from None
 
 
 def clean_asr_text(text: str) -> str:

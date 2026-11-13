@@ -1,0 +1,14 @@
+https://zectrix.theduy.cloud:443 {
+    request_body {
+        max_size 1MB
+    }
+
+    @terminal path /health /v1/* /approval/*
+    handle @terminal {
+        reverse_proxy 127.0.0.1:8790
+    }
+
+    handle {
+        respond "Catthew family terminal" 404
+    }
+}

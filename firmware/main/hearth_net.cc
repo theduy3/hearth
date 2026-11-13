@@ -1,168 +1,199 @@
 #include "hearth_net.h"
-
-#include <cstdlib>
+#include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
-
+#include <strings.h>
+#include <string>
+#include "cJSON.h"
+#include "esp_crt_bundle.h"
 #include "esp_http_client.h"
-#include "esp_log.h"
-#include "esp_task_wdt.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "hearth_util.h"
+#include "esp_timer.h"
 
 namespace {
-
-constexpr const char* kTag = "hearth_net";
-constexpr int kBodyCap = 8192;
-
-struct Sink {
-    char buffer[kBodyCap] = {};
-    int length = 0;
-    bool overflow = false;
+std::atomic<bool> g_stopped{false};
+std::atomic<int> g_last_http_status{0};
+struct ResponseHeaders {
+    HearthFrameInfo frame{};
+    char type[80]{};
+    bool invalid=false;
 };
-
-// All runtime HTTP runs on the dedicated network task after startup.
-Sink g_sink;
-
-esp_err_t OnHttp(esp_http_client_event_t* event) {
-    if (event->event_id != HTTP_EVENT_ON_DATA) {
-        return ESP_OK;
-    }
-    auto* sink = static_cast<Sink*>(event->user_data);
-    if (sink == nullptr) {
-        return ESP_OK;
-    }
-    const int room = kBodyCap - 1 - sink->length;
-    if (room <= 0) {
-        sink->overflow = true;
-        return ESP_OK;
-    }
-    const int n = event->data_len < room ? event->data_len : room;
-    std::memcpy(sink->buffer + sink->length, event->data, n);
-    sink->length += n;
-    if (n < event->data_len) sink->overflow = true;
-    sink->buffer[sink->length] = '\0';
+void HeaderCopy(char* out,size_t cap,const char* value,ResponseHeaders* headers) {
+    if (!value || std::strlen(value)>=cap) { headers->invalid=true;return; }
+    std::memcpy(out,value,std::strlen(value)+1);
+}
+esp_err_t Event(esp_http_client_event_t* event) {
+    if (event->event_id!=HTTP_EVENT_ON_HEADER || !event->header_key) return ESP_OK;
+    auto* h=static_cast<ResponseHeaders*>(event->user_data);
+    const char* key=event->header_key;
+    if (!strcasecmp(key,"Content-Type")) HeaderCopy(h->type,sizeof(h->type),event->header_value,h);
+    if (!strcasecmp(key,"ETag")) HeaderCopy(h->frame.etag,sizeof(h->frame.etag),event->header_value,h);
+    if (!strcasecmp(key,"X-Hearth-Page")) HeaderCopy(h->frame.page,sizeof(h->frame.page),event->header_value,h);
+    if (!strcasecmp(key,"X-Hearth-Next")) HeaderCopy(h->frame.next,sizeof(h->frame.next),event->header_value,h);
+    if (!strcasecmp(key,"X-Hearth-Previous")) HeaderCopy(h->frame.previous,sizeof(h->frame.previous),event->header_value,h);
     return ESP_OK;
 }
-
-void JoinHub(char* url, size_t cap, const char* hub_base, const char* path) {
-    const bool slash = hub_base[std::strlen(hub_base) - 1] == '/';
-    std::snprintf(url, cap, slash ? "%s%s" : "%s/%s", hub_base, path);
-}
-
-esp_err_t Perform(const char* url, esp_http_client_method_t method,
-                  const uint8_t* body, size_t body_len, const char* content_type,
-                  char* out, size_t cap, const char* client_id = nullptr) {
-    if (out == nullptr || cap == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    out[0] = '\0';
-    g_sink.length = 0;
-    g_sink.overflow = false;
-    g_sink.buffer[0] = '\0';
-    esp_http_client_config_t cfg = {};
-    cfg.url = url;
-    cfg.method = method;
-    cfg.timeout_ms = 15000;
-    cfg.event_handler = OnHttp;
-    cfg.user_data = &g_sink;
-
-    esp_http_client_handle_t client = esp_http_client_init(&cfg);
-    if (client == nullptr) {
-        return ESP_ERR_NO_MEM;
-    }
-    if (content_type != nullptr) {
-        esp_http_client_set_header(client, "Content-Type", content_type);
-    }
-    if (client_id != nullptr && client_id[0])
-        esp_http_client_set_header(client, "X-Hearth-Request-Id", client_id);
-    if (body != nullptr && body_len > 0) {
-        esp_http_client_set_post_field(client,
-                                        reinterpret_cast<const char*>(body),
-                                        static_cast<int>(body_len));
-    }
-    TaskHandle_t self = xTaskGetCurrentTaskHandle();
-    const bool watched = esp_task_wdt_status(self) == ESP_OK;
-    if (watched) {
-        (void)esp_task_wdt_reset();
-        (void)esp_task_wdt_delete(self);
-    }
-    const esp_err_t err = esp_http_client_perform(client);
-    if (watched) {
-        (void)esp_task_wdt_add(self);
-    }
-    const int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
-    if (err != ESP_OK) {
-        ESP_LOGW(kTag, "%s failed: %s", url, esp_err_to_name(err));
-        return err;
-    }
-    if (g_sink.overflow) {
-        ESP_LOGW(kTag, "%s response exceeded %d bytes", url, kBodyCap);
-        return ESP_ERR_INVALID_SIZE;
-    }
-    if (status != 200) {
-        ESP_LOGW(kTag, "%s HTTP %d body=%s", url, status, g_sink.buffer);
-        return ESP_FAIL;
-    }
-    HearthCopy(out, cap, g_sink.buffer);
-    return ESP_OK;
-}
-
-}  // namespace
-
-esp_err_t HearthHttpGet(const char* url, char* out, size_t cap) {
-    if (url == nullptr || url[0] == '\0') {
-        return ESP_ERR_INVALID_ARG;
-    }
-    return Perform(url, HTTP_METHOD_GET, nullptr, 0, nullptr, out, cap);
-}
-
-esp_err_t HearthHttpPost(const char* url, const uint8_t* body, size_t body_len,
-                         const char* content_type, char* out, size_t cap) {
-    if (url == nullptr || url[0] == '\0') {
-        return ESP_ERR_INVALID_ARG;
-    }
-    return Perform(url, HTTP_METHOD_POST, body, body_len, content_type, out,
-                   cap);
-}
-
-esp_err_t HearthPostUtterance(const char* hub_base, const uint8_t* wav,
-                              size_t wav_bytes, char* json, size_t json_cap,
-                              uint32_t* stt_ms, const char* client_id) {
-    if (hub_base == nullptr || hub_base[0] == '\0' || wav == nullptr ||
-        wav_bytes == 0 || json == nullptr || json_cap == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (stt_ms != nullptr) {
-        *stt_ms = 0;
-    }
-    char url[128];
-    JoinHub(url, sizeof(url), hub_base, "v1/utterance");
-    const esp_err_t err = Perform(url, HTTP_METHOD_POST, wav, wav_bytes,
-                                  "audio/wav", json, json_cap, client_id);
-    if (err != ESP_OK) {
-        return err;
-    }
-    if (stt_ms != nullptr) {
-        char ms[16];
-        if (HearthJsonString(json, "ms", ms, sizeof(ms))) {
-            *stt_ms = static_cast<uint32_t>(atoi(ms));
+class Http {
+public:
+    ResponseHeaders headers{};
+    esp_http_client_handle_t client=nullptr;
+    int64_t deadline;
+    Http(const HearthConfig& config,const std::string& path,uint32_t maximum_ms=20000)
+        : deadline(esp_timer_get_time()+static_cast<int64_t>(maximum_ms)*1000) {
+        if (!HearthConfigComplete(config)) return;
+        std::string url=std::string(config.hub)+path;
+        esp_http_client_config_t options{};
+        options.url=url.c_str(); options.timeout_ms=5000;
+        options.crt_bundle_attach=esp_crt_bundle_attach;
+        options.disable_auto_redirect=true; options.event_handler=Event;
+        options.user_data=&headers; options.buffer_size=2048;
+        client=esp_http_client_init(&options);
+        if (client) {
+            char auth[112]{};
+            std::snprintf(auth,sizeof(auth),"Bearer %s",config.token);
+            if (esp_http_client_set_header(client,"Authorization",auth)!=ESP_OK) {
+                esp_http_client_cleanup(client);client=nullptr;
+            }
         }
     }
-    char request_id[40];
-    if (HearthJsonString(json, "request_id", request_id, sizeof(request_id)))
-        ESP_LOGI(kTag, "voice queued: %s", request_id);
-    return ESP_OK;
+    bool Alive() const { return !g_stopped.load() && esp_timer_get_time()<deadline; }
+    ~Http() { if (client) { esp_http_client_close(client);esp_http_client_cleanup(client); } }
+    esp_err_t Open(const uint8_t* data=nullptr,size_t size=0,const char* type=nullptr,const char* upload=nullptr,const char* etag=nullptr) {
+        if (!client) return ESP_ERR_NO_MEM;
+        if (!Alive()) return ESP_ERR_TIMEOUT;
+        if (data) esp_http_client_set_method(client,HTTP_METHOD_POST);
+        if (type) esp_http_client_set_header(client,"Content-Type",type);
+        if (upload) esp_http_client_set_header(client,"X-Hearth-Request-Id",upload);
+        if (etag && *etag) esp_http_client_set_header(client,"If-None-Match",etag);
+        esp_err_t result=esp_http_client_open(client,static_cast<int>(size));
+        if (result!=ESP_OK) return result;
+        size_t sent=0;
+        while (sent<size) {
+            if(!Alive()) return ESP_ERR_TIMEOUT;
+            int n=esp_http_client_write(client,reinterpret_cast<const char*>(data+sent),std::min<size_t>(4096,size-sent));
+            if (n<=0) return ESP_FAIL;
+            sent+=static_cast<size_t>(n);
+        }
+        if (!Alive()) return ESP_ERR_TIMEOUT;
+        if (esp_http_client_fetch_headers(client)<0 || headers.invalid) return ESP_ERR_INVALID_RESPONSE;
+        g_last_http_status=Status();
+        return Alive()?ESP_OK:ESP_ERR_TIMEOUT;
+    }
+    int Status() const { return esp_http_client_get_status_code(client); }
+    int64_t Length() const { return esp_http_client_get_content_length(client); }
+    bool Read(uint8_t* data,size_t size) {
+        size_t have=0;
+        while (have<size) {
+            if(!Alive()) return false;
+            int n=esp_http_client_read(client,reinterpret_cast<char*>(data+have),std::min<size_t>(2048,size-have));
+            if (n<=0) return false;
+            have+=static_cast<size_t>(n);
+        }
+        return Alive() && esp_http_client_is_complete_data_received(client);
+    }
+    cJSON* Json() {
+        int64_t size=Length();
+        if (size<=0 || size>2048) return nullptr;
+        char data[2049]{};
+        if (!Read(reinterpret_cast<uint8_t*>(data),static_cast<size_t>(size))) return nullptr;
+        return cJSON_ParseWithLength(data,static_cast<size_t>(size));
+    }
+};
+
+bool String(cJSON* object,const char* key,char* target,size_t capacity) {
+    cJSON* value=cJSON_GetObjectItemCaseSensitive(object,key);
+    if (!cJSON_IsString(value) || !value->valuestring || std::strlen(value->valuestring)>=capacity) return false;
+    std::strcpy(target,value->valuestring);
+    return true;
+}
 }
 
-esp_err_t HearthGetPoster(const char* hub_base, char* json, size_t json_cap) {
-    if (hub_base == nullptr || hub_base[0] == '\0' || json == nullptr ||
-        json_cap == 0) {
-        return ESP_ERR_INVALID_ARG;
+void HearthNetStop() { g_stopped.store(true); }
+int HearthNetLastStatus() { return g_last_http_status.load(); }
+
+bool HearthFrameInfoValid(const HearthFrameInfo& info) {
+    if (!HearthPageValid(info.page) || !HearthPageValid(info.next) || !HearthPageValid(info.previous) || strnlen(info.etag,sizeof(info.etag))!=66 || info.etag[0]!='"' || info.etag[65]!='"') return false;
+    for (size_t i=1;i<65;++i) if (!((info.etag[i]>='0'&&info.etag[i]<='9')||(info.etag[i]>='a'&&info.etag[i]<='f'))) return false;
+    return true;
+}
+namespace {
+std::string RequestPath(const char* id,const char* suffix) { return std::string("/v1/requests/")+id+suffix; }
+}
+
+esp_err_t HearthFetchFrame(const HearthConfig& config,const char* page,const char* etag,uint8_t* pixels,HearthFrameInfo* info,bool* unchanged) {
+    if (!HearthPageValid(page) || !pixels || !info || !unchanged) return ESP_ERR_INVALID_ARG;
+    Http http(config,std::string("/v1/frame?page=")+page);
+    esp_err_t result=http.Open(nullptr,0,nullptr,nullptr,etag);
+    if (result!=ESP_OK) return result;
+    if (!HearthFrameInfoValid(http.headers.frame)) return ESP_ERR_INVALID_RESPONSE;
+    if (http.Status()==304) {
+        if (!etag || !*etag || std::strcmp(etag,http.headers.frame.etag)!=0) return ESP_ERR_INVALID_RESPONSE;
+        *unchanged=true;*info=http.headers.frame;return ESP_OK;
     }
-    char url[128];
-    JoinHub(url, sizeof(url), hub_base, "v1/poster");
-    return HearthHttpGet(url, json, json_cap);
+    if (http.Status()!=200 || http.Length()!=kHearthFrameBytes || std::strcmp(http.headers.type,"application/vnd.catthew.bwry2")) return ESP_ERR_INVALID_RESPONSE;
+    if (!http.Read(pixels,kHearthFrameBytes)) return ESP_FAIL;
+    *unchanged=false;*info=http.headers.frame;return ESP_OK;
+}
+
+esp_err_t HearthFetchDevice(const HearthConfig& config,HearthDeviceStatus* status) {
+    if (!status) return ESP_ERR_INVALID_ARG;
+    *status={};
+    Http http(config,"/v1/device");
+    esp_err_t result=http.Open();
+    if (result!=ESP_OK) return result;
+    if (http.Status()!=200) return ESP_ERR_INVALID_RESPONSE;
+    cJSON* body=http.Json();
+    if (!cJSON_IsObject(body)) { cJSON_Delete(body);return ESP_ERR_INVALID_RESPONSE; }
+    cJSON* request=cJSON_GetObjectItemCaseSensitive(body,"request");
+    bool good=cJSON_IsNull(request);
+    if (cJSON_IsObject(request)) {
+        good=String(request,"id",status->id,sizeof(status->id)) && HearthRequestIdValid(status->id) &&
+             String(request,"client_id",status->client,sizeof(status->client)) &&
+             String(request,"status",status->status,sizeof(status->status)) &&
+             String(request,"speech_status",status->speech,sizeof(status->speech)) &&
+             String(request,"page",status->page,sizeof(status->page)) &&
+             (!status->page[0] || !std::strcmp(status->page,"today") || !std::strcmp(status->page,"groceries"));
+        status->present=good;
+    }
+    cJSON_Delete(body);
+    return good ? ESP_OK : ESP_ERR_INVALID_RESPONSE;
+}
+
+esp_err_t HearthUpload(const HearthConfig& config,const HearthClip& clip,const char* client_id,char (&id)[33]) {
+    Http http(config,"/v1/utterance");
+    esp_err_t result=http.Open(clip.wav,clip.bytes,"audio/wav",client_id);
+    if (result!=ESP_OK) return result;
+    if (http.Status()!=202) return ESP_ERR_INVALID_RESPONSE;
+    cJSON* body=http.Json();
+    bool good=String(body,"request_id",id,sizeof(id)) && HearthRequestIdValid(id);
+    cJSON_Delete(body);
+    return good ? ESP_OK : ESP_ERR_INVALID_RESPONSE;
+}
+
+esp_err_t HearthAck(const HearthConfig& config,const char* id) {
+    if (!HearthRequestIdValid(id)) return ESP_ERR_INVALID_ARG;
+    Http http(config,RequestPath(id,"/audio-ack"));
+    const uint8_t body[]={'{','}'};
+    esp_err_t result=http.Open(body,2,"application/json");
+    if (result!=ESP_OK) return result;
+    return http.Status()==200 ? ESP_OK : ESP_ERR_INVALID_RESPONSE;
+}
+
+esp_err_t HearthFetchAudio(const HearthConfig& config,const char* id,HearthPcmConsumer consume,void* context,bool (*cancelled)(void*)) {
+    if (!HearthRequestIdValid(id) || !consume || !cancelled) return ESP_ERR_INVALID_ARG;
+    if (cancelled(context)) return ESP_ERR_INVALID_STATE;
+    Http http(config,RequestPath(id,"/audio"),150000);
+    esp_err_t result=http.Open();
+    if (result!=ESP_OK) return result;
+    if (http.Status()!=200 || http.Length()<=44 || http.Length()>static_cast<int64_t>(kHearthMaxAudioBytes) || std::strcmp(http.headers.type,"audio/wav")) return ESP_ERR_INVALID_RESPONSE;
+    HearthPcmDecoder decoder(static_cast<size_t>(http.Length()),consume,context);
+    uint8_t buffer[1024]{};
+    for (;;) {
+        if (!http.Alive() || cancelled(context)) return ESP_ERR_INVALID_STATE;
+        int n=esp_http_client_read(http.client,reinterpret_cast<char*>(buffer),sizeof(buffer));
+        if (n<0) return ESP_FAIL;
+        if (n==0) break;
+        if (!decoder.Feed(buffer,static_cast<size_t>(n))) return ESP_FAIL;
+    }
+    return decoder.Complete() && esp_http_client_is_complete_data_received(http.client) ? ESP_OK : ESP_FAIL;
 }

@@ -1,6 +1,6 @@
 // Button timing rules with no FreeRTOS or driver dependency, so the press
 // classification that decides "page turn" vs "hold to speak" can be exercised
-// on a host (see tests/test_hearth_model.cc).
+// on a host (see tests/note4c_buttons_test.cc).
 #ifndef ZECTRIX_BUTTON_LOGIC_H_
 #define ZECTRIX_BUTTON_LOGIC_H_
 

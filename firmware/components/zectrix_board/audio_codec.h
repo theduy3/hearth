@@ -22,7 +22,7 @@ public:
     virtual void EnableInput(bool enable);
     virtual void EnableOutput(bool enable);
 
-    virtual void OutputData(std::vector<int16_t>& data);
+    virtual bool OutputData(std::vector<int16_t>& data);
     virtual bool InputData(std::vector<int16_t>& data);
     virtual void Start();
     // Stop the I2S channels so the ESP stops clocking a codec that has been

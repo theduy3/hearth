@@ -99,7 +99,7 @@ def wait_for_port(port: str, timeout_s: float = 20.0) -> None:
     raise FlashError(f"serial port {port} did not appear within {timeout_s:.0f}s")
 
 
-def run_esptool(esptool: Path, port: str, baud: int, args: list[str]) -> str:
+def run_esptool(esptool: Path, port: str, baud: int, args: list[str], *, after: str = "hard-reset") -> str:
     wait_for_port(port)
     cmd = [
         str(esptool),
@@ -110,7 +110,7 @@ def run_esptool(esptool: Path, port: str, baud: int, args: list[str]) -> str:
         "--baud",
         str(baud),
         "--after",
-        "hard-reset",
+        after,
         *args,
     ]
     try:
@@ -215,6 +215,7 @@ def cmd_dump(args: argparse.Namespace) -> int:
         args.port,
         args.baud,
         ["read-flash", "0x0", str(FLASH_SIZE), str(image)],
+        after="no-reset",  # Firmware must not modify NVS before verify-flash.
     )
     print(dump_out)
     require_image(image)
@@ -230,7 +231,7 @@ def cmd_dump(args: argparse.Namespace) -> int:
         write_sidecar(mirror, digest)
         print(f"mirror   {mirror}")
 
-    print("Dump complete. Run `tools/note4_flash.py verify` next.")
+    print("Dump complete. Device remains in the bootloader; run `tools/note4_flash.py verify` next.")
     return 0
 
 

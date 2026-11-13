@@ -10,7 +10,7 @@ Local changes for Hearth:
   press) as plain millisecond arithmetic, and `ButtonTask()` is a thin sampler
   around it. Hold-to-speak is now timed from the press edge, not from the end
   of the debounce, at 450 ms instead of 220 ms. The rules are unit-tested on a
-  host in `tests/test_hearth_model.cc`.
+  host in `tests/note4c_buttons_test.cc`.
 - `TickPower()` ticks charge detection with the last battery sample, so the ten
   ADC conversions behind `ReadPowerSnapshot()` no longer need to run 20 times a
   second.
