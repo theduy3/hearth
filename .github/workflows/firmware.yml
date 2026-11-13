@@ -1,0 +1,46 @@
+name: Note4C firmware
+on:
+  push:
+    branches: [main, feat/catthew-note4c]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: note4c-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check native display and PCM protocol
+        run: |
+          python3 -m unittest discover -s tests -p test_note4c_epd.py -v
+          python3 -m unittest discover -s tests -p test_note4c_protocol.py -v
+      - name: Build with pinned ESP-IDF v6.1
+        run: |
+          source /opt/esp/idf/export.sh
+          idf.py -C firmware set-target esp32s3
+          idf.py -C firmware -j 2 build
+          python3 tools/firmware_manifest.py firmware/build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: note4c-firmware
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            firmware/build/hearth.bin
+            firmware/build/hearth.elf
+            firmware/build/hearth.map
+            firmware/build/bootloader/bootloader.bin
+            firmware/build/partition_table/partition-table.bin
+            firmware/build/flasher_args.json
+            firmware/build/note4c-manifest.json

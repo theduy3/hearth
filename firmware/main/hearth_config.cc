@@ -1,183 +1,164 @@
 #include "hearth_config.h"
-
+#include <cctype>
 #include <cstdio>
 #include <cstring>
-
-#include "argtable3/argtable3.h"
-#include "esp_console.h"
-#include "esp_log.h"
+#include "cJSON.h"
+#include "esp_mac.h"
 #include "esp_system.h"
-#include "hearth_stats.h"
-#include "hearth_util.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs.h"
-#include "sdkconfig.h"
 
 namespace {
+constexpr const char* kNamespace = "catthew";
+constexpr uint32_t kMagic = 0x43415431;
+struct Stored { uint32_t magic; HearthConfig config; };
+HearthConfig g_boot{};
 
-constexpr const char* kTag = "hearth.cfg";
-constexpr const char* kNamespace = "hearth";
-
-HearthConfig* g_config = nullptr;
-
-void GetStr(nvs_handle_t handle, const char* key, char* out, size_t cap) {
-    size_t length = cap;
-    if (nvs_get_str(handle, key, out, &length) != ESP_OK) {
-        out[0] = '\0';
-    }
+template<size_t N> bool Bounded(const char (&value)[N]) {
+    return strnlen(value, N) < N;
 }
 
-}  // namespace
+bool CopyJson(cJSON* object, const char* key, char* target, size_t capacity) {
+    cJSON* item = cJSON_GetObjectItemCaseSensitive(object, key);
+    if (!cJSON_IsString(item) || item->valuestring == nullptr) return false;
+    size_t size = std::strlen(item->valuestring);
+    if (size >= capacity) return false;
+    std::memcpy(target, item->valuestring, size + 1);
+    return true;
+}
 
-esp_err_t HearthConfigLoad(HearthConfig* out) {
-    if (out == nullptr) {
-        return ESP_ERR_INVALID_ARG;
+void Result(bool ok, const char* message) {
+    // Messages are constants; never echo the incoming provisioning document.
+    std::printf("CATTHEW_RESULT {\"ok\":%s,\"message\":\"%s\"}\n", ok ? "true" : "false", message);
+    std::fflush(stdout);
+}
+
+void Console(void*) {
+    char line[768]{};
+    size_t used = 0;
+    bool overflow = false;
+    for (;;) {
+        int ch = std::getchar();
+        if (ch == EOF) { clearerr(stdin); vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+        if (ch == '\r') continue;
+        if (ch != '\n') {
+            if (used + 1 < sizeof(line)) line[used++] = static_cast<char>(ch);
+            else overflow = true;
+            continue;
+        }
+        line[used] = 0;
+        if (overflow) Result(false, "configuration too long");
+        else if (std::strcmp(line, "CATTHEW_INFO") == 0) {
+            uint8_t mac[6]{};
+            esp_read_mac(mac, ESP_MAC_WIFI_STA);
+            std::printf("CATTHEW_RESULT {\"ok\":true,\"configured\":%s,\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}\n",
+                        HearthConfigComplete(g_boot) ? "true" : "false", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            std::fflush(stdout);
+        } else if (std::strncmp(line, "CATTHEW_CONFIG ", 15) == 0) {
+            cJSON* document = cJSON_Parse(line + 15);
+            HearthConfig staged{};
+            bool valid = cJSON_IsObject(document) && cJSON_GetArraySize(document) == 4 &&
+                CopyJson(document, "ssid", staged.ssid, sizeof(staged.ssid)) &&
+                CopyJson(document, "password", staged.password, sizeof(staged.password)) &&
+                CopyJson(document, "hub", staged.hub, sizeof(staged.hub)) &&
+                CopyJson(document, "token", staged.token, sizeof(staged.token)) && HearthConfigComplete(staged);
+            if (valid && HearthConfigSave(staged) == ESP_OK) {
+                Result(true, "saved; rebooting");
+                cJSON_Delete(document);
+                std::memset(line, 0, sizeof(line));
+                std::memset(&staged, 0, sizeof(staged));
+                vTaskDelay(pdMS_TO_TICKS(250));
+                esp_restart();
+            } else Result(false, "configuration rejected or could not be saved");
+            cJSON_Delete(document);
+            std::memset(&staged, 0, sizeof(staged));
+        }
+        std::memset(line, 0, sizeof(line));
+        used = 0; overflow = false;
     }
-    HearthCopy(out->ssid, sizeof(out->ssid), CONFIG_HEARTH_WIFI_SSID);
-    HearthCopy(out->password, sizeof(out->password), CONFIG_HEARTH_WIFI_PASSWORD);
-    HearthCopy(out->hub, sizeof(out->hub), CONFIG_HEARTH_HUB_URL);
+}
+}
 
+bool HearthConfigComplete(const HearthConfig& c) {
+    if (!Bounded(c.ssid) || !Bounded(c.password) || !Bounded(c.hub) || !Bounded(c.token) || !c.ssid[0]) return false;
+    size_t password = std::strlen(c.password);
+    if (password != 0 && (password < 8 || password > 64)) return false;
+    if (password == 64) for (char ch : c.password) { if (!ch) break; if (!std::isxdigit(static_cast<unsigned char>(ch))) return false; }
+    if (std::strncmp(c.hub, "https://", 8) != 0 || !c.hub[8]) return false;
+    for (const char* p = c.hub + 8; *p; ++p) {
+        if (!std::isalnum(static_cast<unsigned char>(*p)) && *p != '.' && *p != '-' && *p != ':') return false;
+    }
+    size_t token = std::strlen(c.token);
+    if (token < 32) return false;
+    for (const char* p = c.token; *p; ++p) {
+        if (!std::isalnum(static_cast<unsigned char>(*p)) && *p != '-' && *p != '_') return false;
+    }
+    return true;
+}
+
+esp_err_t HearthStoreBlob(const char* key, const void* data, size_t size) {
     nvs_handle_t handle;
-    if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) {
-        return ESP_OK;
-    }
-    char scratch[96];
-    GetStr(handle, "ssid", scratch, sizeof(scratch));
-    if (scratch[0]) {
-        HearthCopy(out->ssid, sizeof(out->ssid), scratch);
-    }
-    GetStr(handle, "pass", scratch, sizeof(scratch));
-    if (scratch[0]) {
-        HearthCopy(out->password, sizeof(out->password), scratch);
-    }
-    GetStr(handle, "hub", scratch, sizeof(scratch));
-    if (scratch[0]) {
-        HearthCopy(out->hub, sizeof(out->hub), scratch);
-    }
+    esp_err_t result = nvs_open(kNamespace, NVS_READWRITE, &handle);
+    if (result != ESP_OK) return result;
+    result = nvs_set_blob(handle, key, data, size);
+    if (result == ESP_OK) result = nvs_commit(handle);
     nvs_close(handle);
-    return ESP_OK;
+    return result;
+}
+
+esp_err_t HearthLoadBlob(const char* key, void* data, size_t size) {
+    nvs_handle_t handle;
+    esp_err_t result = nvs_open(kNamespace, NVS_READONLY, &handle);
+    if (result != ESP_OK) return result;
+    size_t actual = size;
+    result = nvs_get_blob(handle, key, data, &actual);
+    nvs_close(handle);
+    return result == ESP_OK && actual != size ? ESP_ERR_INVALID_SIZE : result;
 }
 
 esp_err_t HearthConfigSave(const HearthConfig& config) {
+    if (!HearthConfigComplete(config)) return ESP_ERR_INVALID_ARG;
+    Stored stored{};
+    stored.magic = kMagic;
+    stored.config = config;
+    return HearthStoreBlob("settings", &stored, sizeof(stored));
+}
+
+esp_err_t HearthConfigLoad(HearthConfig* config) {
+    if (config == nullptr) return ESP_ERR_INVALID_ARG;
+    *config = {};
+    Stored stored{};
+    esp_err_t result = HearthLoadBlob("settings", &stored, sizeof(stored));
+    if (result == ESP_ERR_NVS_NOT_FOUND) return ESP_OK;
+    if (result != ESP_OK) return result;
+    if (stored.magic != kMagic || !HearthConfigComplete(stored.config)) return ESP_ERR_INVALID_STATE;
+    *config = stored.config;
+    return ESP_OK;
+}
+
+esp_err_t HearthStoreId(const char* key, const char* value) {
+    if (value == nullptr || std::strlen(value) > 128) return ESP_ERR_INVALID_ARG;
     nvs_handle_t handle;
-    esp_err_t err = nvs_open(kNamespace, NVS_READWRITE, &handle);
-    if (err != ESP_OK) {
-        return err;
-    }
-    nvs_set_str(handle, "ssid", config.ssid);
-    nvs_set_str(handle, "pass", config.password);
-    nvs_set_str(handle, "hub", config.hub);
-    err = nvs_commit(handle);
+    esp_err_t result = nvs_open(kNamespace, NVS_READWRITE, &handle);
+    if (result != ESP_OK) return result;
+    result = nvs_set_str(handle, key, value);
+    if (result == ESP_OK) result = nvs_commit(handle);
     nvs_close(handle);
-    return err;
+    return result;
 }
 
-bool HearthConfigComplete(const HearthConfig& config) {
-    return config.ssid[0] != '\0' && config.hub[0] != '\0';
+void HearthLoadId(const char* key, char* value, size_t capacity) {
+    value[0] = 0;
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) return;
+    size_t size = capacity;
+    if (nvs_get_str(handle, key, value, &size) != ESP_OK) value[0] = 0;
+    nvs_close(handle);
 }
 
-namespace {
-
-struct {
-    struct arg_str* key;
-    struct arg_str* value;
-    struct arg_end* end;
-} g_set_args;
-
-int CmdShow(int, char**) {
-    const HearthConfig& c = *g_config;
-    printf("ssid  %s\n", c.ssid);
-    printf("pass  %s\n", c.password[0] ? "(set)" : "(empty)");
-    printf("hub   %s\n", c.hub);
-    return 0;
-}
-
-int CmdStats(int, char**) {
-    const HearthStats& s = g_hearth_stats;
-    printf("up      %us (%u wakes, %u refreshes, %u paints skipped)\n",
-           static_cast<unsigned>(s.uptime_s), static_cast<unsigned>(s.wakes),
-           static_cast<unsigned>(s.refreshes),
-           static_cast<unsigned>(s.paints_skipped));
-    printf("poster  %u fetches, %u changed and repainted\n",
-           static_cast<unsigned>(s.poster_fetches),
-           static_cast<unsigned>(s.poster_repaints));
-    printf("poll    next fetch in %u ms\n", static_cast<unsigned>(s.poll_ms));
-    if (s.battery_valid) {
-        printf("battery %u mV %u%%%s\n", static_cast<unsigned>(s.battery_mv),
-               s.battery_percent, s.charging ? " charging" : "");
-    } else {
-        printf("battery (no ADC reading)\n");
-    }
-    printf("screen  %s\n", s.screen);
-    return 0;
-}
-
-int CmdSet(int argc, char** argv) {
-    const int errors = arg_parse(argc, argv, (void**)&g_set_args);
-    if (errors != 0) {
-        arg_print_errors(stderr, g_set_args.end, argv[0]);
-        return 1;
-    }
-    const char* key = g_set_args.key->sval[0];
-    const char* value = g_set_args.value->count ? g_set_args.value->sval[0] : "";
-    HearthConfig& c = *g_config;
-    if (strcmp(key, "ssid") == 0) {
-        HearthCopy(c.ssid, sizeof(c.ssid), value);
-    } else if (strcmp(key, "pass") == 0) {
-        HearthCopy(c.password, sizeof(c.password), value);
-    } else if (strcmp(key, "hub") == 0) {
-        HearthCopy(c.hub, sizeof(c.hub), value);
-    } else {
-        printf("unknown key '%s' (ssid pass hub)\n", key);
-        return 1;
-    }
-    printf("set %s; run 'hearth-save' then 'hearth-reboot'\n", key);
-    return 0;
-}
-
-int CmdSave(int, char**) {
-    const esp_err_t err = HearthConfigSave(*g_config);
-    printf("%s\n", err == ESP_OK ? "saved" : esp_err_to_name(err));
-    return err == ESP_OK ? 0 : 1;
-}
-
-int CmdReboot(int, char**) {
-    printf("rebooting\n");
-    fflush(stdout);
-    esp_restart();
-    return 0;
-}
-
-}  // namespace
-
-void HearthConfigRegisterConsole(HearthConfig* config) {
-    g_config = config;
-    esp_console_repl_t* repl = nullptr;
-    esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-    repl_config.prompt = "hearth>";
-    repl_config.max_cmdline_length = 160;
-    if (esp_console_new_repl_stdio(&repl_config, &repl) != ESP_OK) {
-        ESP_LOGW(kTag, "console unavailable; using stored config only");
-        return;
-    }
-    g_set_args.key = arg_str1(nullptr, nullptr, "<key>", "ssid|pass|hub");
-    g_set_args.value = arg_str0(nullptr, nullptr, "<value>", "new value");
-    g_set_args.end = arg_end(2);
-
-    const esp_console_cmd_t commands[] = {
-        {"hearth-show", "Print Wi-Fi and hub config", nullptr, CmdShow,
-         nullptr, nullptr, nullptr},
-        {"hearth-stats", "Print wake-ups, refreshes, and battery", nullptr,
-         CmdStats, nullptr, nullptr, nullptr},
-        {"hearth-set", "Set ssid, pass, or hub", nullptr, CmdSet, &g_set_args,
-         nullptr, nullptr},
-        {"hearth-save", "Write config to NVS", nullptr, CmdSave, nullptr,
-         nullptr, nullptr},
-        {"hearth-reboot", "Restart", nullptr, CmdReboot, nullptr, nullptr,
-         nullptr},
-    };
-    for (const auto& command : commands) {
-        ESP_ERROR_CHECK(esp_console_cmd_register(&command));
-    }
-    ESP_ERROR_CHECK(esp_console_start_repl(repl));
-    ESP_LOGI(kTag, "console ready: hearth-show / hearth-stats / hearth-set");
+void HearthConfigStartConsole(const HearthConfig& config) {
+    g_boot = config;
+    setvbuf(stdin, nullptr, _IONBF, 0);
+    xTaskCreate(Console, "private_usb_setup", 6144, nullptr, 2, nullptr);
 }

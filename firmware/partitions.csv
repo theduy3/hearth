@@ -1,4 +1,6 @@
+# NOTE4C only. The larger NVS holds transactional cached30000-byte frames.
+# The first installation erases this partition after verifying the factory dump.
 # Name,    Type, SubType, Offset,   Size,      Flags
-nvs,       data, nvs,     0x9000,   0x6000,
-phy_init,  data, phy,     0xf000,   0x1000,
-factory,   app,  factory, 0x10000,  0x300000,
+nvs,       data, nvs,     0x9000,   0x26000,
+phy_init,  data, phy,     0x2f000,  0x1000,
+factory,   app,  factory, 0x30000,  0x3d0000,

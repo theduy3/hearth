@@ -12,16 +12,13 @@ AudioCodec::AudioCodec() {
 AudioCodec::~AudioCodec() {
 }
 
-void AudioCodec::OutputData(std::vector<int16_t>& data) {
-    Write(data.data(), data.size());
+bool AudioCodec::OutputData(std::vector<int16_t>& data) {
+    return Write(data.data(), data.size()) == static_cast<int>(data.size());
 }
 
 bool AudioCodec::InputData(std::vector<int16_t>& data) {
     int samples = Read(data.data(), data.size());
-    if (samples > 0) {
-        return true;
-    }
-    return false;
+    return samples == static_cast<int>(data.size());
 }
 
 void AudioCodec::Start() {

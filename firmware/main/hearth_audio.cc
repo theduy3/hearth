@@ -1,180 +1,85 @@
 #include "hearth_audio.h"
-
 #include <cstring>
-#include <vector>
-
 #include "audio_codec.h"
 #include "esp_heap_caps.h"
-#include "esp_log.h"
-#include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "zectrix_board_config.h"
+#include "hearth_protocol.h"
 
-namespace {
-
-constexpr const char* kTag = "hearth_audio";
-constexpr int kRate = ZECTRIX_AUDIO_SAMPLE_RATE;
-constexpr int kChunk = 1600;  // 100 ms
-constexpr int kHeader = 44;
-
-void PutU16(uint8_t* p, uint16_t v) {
-    p[0] = static_cast<uint8_t>(v);
-    p[1] = static_cast<uint8_t>(v >> 8);
-}
-
-void PutU32(uint8_t* p, uint32_t v) {
-    p[0] = static_cast<uint8_t>(v);
-    p[1] = static_cast<uint8_t>(v >> 8);
-    p[2] = static_cast<uint8_t>(v >> 16);
-    p[3] = static_cast<uint8_t>(v >> 24);
-}
-
-void WriteHeader(uint8_t* p, uint32_t pcm_bytes) {
-    std::memcpy(p, "RIFF", 4);
-    PutU32(p + 4, 36 + pcm_bytes);
-    std::memcpy(p + 8, "WAVE", 4);
-    std::memcpy(p + 12, "fmt ", 4);
-    PutU32(p + 16, 16);
-    PutU16(p + 20, 1);
-    PutU16(p + 22, 1);
-    PutU32(p + 24, kRate);
-    PutU32(p + 28, kRate * 2);
-    PutU16(p + 32, 2);
-    PutU16(p + 34, 16);
-    std::memcpy(p + 36, "data", 4);
-    PutU32(p + 40, pcm_bytes);
-}
-
-}  // namespace
-
+namespace { constexpr uint32_t kRate=16000,kChunk=1600; }
 void HearthClipFree(HearthClip* clip) {
-    if (clip == nullptr) {
-        return;
-    }
-    if (clip->wav != nullptr) {
-        heap_caps_free(clip->wav);
-        clip->wav = nullptr;
-    }
-    clip->bytes = 0;
-    clip->samples = 0;
-    clip->ms = 0;
+    if (clip == nullptr) return;
+    if (clip->wav != nullptr) heap_caps_free(clip->wav);
+    *clip = {};
 }
 
-esp_err_t HearthRecordWhile(ZectrixBoard* board, bool (*held)(),
-                            uint32_t max_ms, HearthClip* out) {
-    if (board == nullptr || held == nullptr || out == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    *out = HearthClip{};
-    if (max_ms < 200) {
-        max_ms = 200;
-    }
-    // A long press that was really a tap is usually released before this task
-    // even starts. Skip the rail ramp and the codec bring-up in that case; the
-    // caller reads ESP_ERR_INVALID_SIZE as "that was a short press".
-    if (!held()) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-    const uint32_t max_samples = (kRate * max_ms) / 1000;
-    const size_t cap = static_cast<size_t>(kHeader) + max_samples * 2;
-    uint8_t* wav = static_cast<uint8_t*>(heap_caps_malloc(
-        cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (wav == nullptr) {
-        wav = static_cast<uint8_t*>(heap_caps_malloc(cap, MALLOC_CAP_8BIT));
-    }
-    if (wav == nullptr) {
-        ESP_LOGE(kTag, "no memory for %u sample clip",
-                 static_cast<unsigned>(max_samples));
-        return ESP_ERR_NO_MEM;
-    }
-
+esp_err_t HearthRecordWhile(ZectrixBoard* board, bool (*held)(), uint32_t max_ms,
+                            HearthClip* out, void (*ready)()) {
+    if (!board || !held || !out || max_ms < 200 || max_ms > 30000) return ESP_ERR_INVALID_ARG;
+    *out = {};
+    if (!held()) return ESP_ERR_INVALID_SIZE;
+    uint32_t maximum = kRate * max_ms / 1000;
+    auto* wav = static_cast<uint8_t*>(heap_caps_malloc(44 + maximum * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!wav) return ESP_ERR_NO_MEM;
     board->SetAudioPower(true);
     vTaskDelay(pdMS_TO_TICKS(40));
     AudioCodec* codec = board->PrepareAudio();
-    if (codec == nullptr || !codec->valid()) {
-        heap_caps_free(wav);
-        board->ReleaseAudio();
-        ESP_LOGE(kTag, "codec missing");
-        return ESP_FAIL;
+    if (!codec || !codec->valid()) {
+        board->ReleaseAudio(); heap_caps_free(wav); return ESP_FAIL;
     }
     codec->EnableOutput(false);
     codec->EnableInput(true);
     vTaskDelay(pdMS_TO_TICKS(180));
     std::vector<int16_t> chunk(kChunk);
-    (void)codec->InputData(chunk);  // discard preroll
-
-    int16_t* pcm = reinterpret_cast<int16_t*>(wav + kHeader);
+    bool good = codec->InputData(chunk);  // discard codec settling before ready
     uint32_t samples = 0;
-    while (held() && samples + kChunk <= max_samples) {
-        if (!codec->InputData(chunk)) {
-            break;
+    if (good && held() && ready) ready();
+    while (good && held() && samples + kChunk <= maximum) {
+        good = codec->InputData(chunk);
+        if (good) {
+            std::memcpy(wav + 44 + samples * 2, chunk.data(), kChunk * sizeof(int16_t));
+            samples += kChunk;
         }
-        std::memcpy(pcm + samples, chunk.data(), kChunk * sizeof(int16_t));
-        samples += kChunk;
-        esp_task_wdt_reset();
     }
     codec->EnableInput(false);
-    // Close the codec registers over I2C, stop the I2S clocks, and drop the
-    // analog rail. The next recording brings the rail up and re-opens the
-    // codec, which is what keeps the rail idle instead of powered all day.
     board->ReleaseAudio();
-
-    if (samples < kRate / 5) {  // < 200 ms
+    if (!good || samples < kRate / 5) {
         heap_caps_free(wav);
-        ESP_LOGW(kTag, "clip too short (%u samples)",
-                 static_cast<unsigned>(samples));
-        return ESP_ERR_INVALID_SIZE;
+        return good ? ESP_ERR_INVALID_SIZE : ESP_FAIL;
     }
-
-    const uint32_t pcm_bytes = samples * 2;
-    WriteHeader(wav, pcm_bytes);
-    out->wav = wav;
-    out->bytes = kHeader + pcm_bytes;
-    out->samples = samples;
-    out->ms = (samples * 1000) / kRate;
-    ESP_LOGI(kTag, "recorded %u ms (%u bytes)",
-             static_cast<unsigned>(out->ms),
-             static_cast<unsigned>(out->bytes));
+    HearthWavHeader(wav, samples * 2);
+    out->wav=wav;out->bytes=44+samples*2;out->samples=samples;out->ms=samples*1000/kRate;
     return ESP_OK;
 }
 
-esp_err_t HearthPlayAlarm(ZectrixBoard* board) {
-    if (board == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    board->SetAudioPower(true);
+bool HearthSpeaker::Begin() {
+    if (codec_) return false;
+    board_->SetAudioPower(true);
     vTaskDelay(pdMS_TO_TICKS(40));
-    AudioCodec* codec = board->PrepareAudio();
-    if (codec == nullptr || !codec->valid()) {
-        ESP_LOGW(kTag, "alarm: codec missing");
-        board->ReleaseAudio();
-        return ESP_FAIL;
+    codec_ = board_->PrepareAudio();
+    if (!codec_ || !codec_->valid()) { board_->ReleaseAudio(); codec_=nullptr; return false; }
+    codec_->EnableInput(false);
+    codec_->SetOutputVolume(60);
+    codec_->EnableOutput(true);
+    return true;
+}
+
+bool HearthSpeaker::Write(const int16_t* samples, size_t count) {
+    if (!codec_ || !samples || count == 0 || count > 512) return false;
+    buffer_.assign(samples,samples+count);
+    return codec_->OutputData(buffer_);
+}
+
+bool HearthSpeaker::End(bool drain) {
+    if (!codec_) return false;
+    bool good=true;
+    if (drain) {
+        buffer_.assign(1600,0);
+        good=codec_->OutputData(buffer_);
+        vTaskDelay(pdMS_TO_TICKS(100));  // drain DMA before reporting delivery
     }
-    codec->EnableInput(false);
-    codec->EnableOutput(true);
-    codec->SetOutputVolume(100);
-    const int freqs[] = {880, 880, 1320, 880, 1320, 1760,
-                         880, 880, 1320, 880, 1320, 1760};
-    for (int freq : freqs) {
-        const int samples = (kRate * 3) / 10;  // 300 ms
-        std::vector<int16_t> buf(static_cast<size_t>(samples));
-        const int half = (kRate / freq) / 2;
-        if (half < 1) {
-            continue;
-        }
-        for (int i = 0; i < samples; ++i) {
-            buf[static_cast<size_t>(i)] =
-                ((i / half) % 2) ? 14000 : static_cast<int16_t>(-14000);
-        }
-        codec->OutputData(buf);
-        vTaskDelay(pdMS_TO_TICKS(80));
-        if (esp_task_wdt_status(xTaskGetCurrentTaskHandle()) == ESP_OK) {
-            (void)esp_task_wdt_reset();
-        }
-    }
-    codec->EnableOutput(false);
-    board->ReleaseAudio();
-    ESP_LOGI(kTag, "alarm chime");
-    return ESP_OK;
+    codec_->EnableOutput(false);
+    board_->ReleaseAudio();
+    codec_=nullptr;
+    return good;
 }
