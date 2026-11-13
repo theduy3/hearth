@@ -23,6 +23,10 @@ No concrete P1 or unrequested scope creep was established within reviewed paths.
 
 A separate read-only reviewer inspected9fd1f98 and found no concrete P1/P2, privacy, lifecycle or contract bug. Matching requests use the polling policy independently of the completed-text processing flag, preserving500ms polling while speech is pending. The boundary regression checks the actual pure policy; it does not establish real network/task/playback timing. Joe selection and pinned-manifest validation were checked, and added timing output excludes transcripts/replies/tokens. SDK build,108 Linux host tests, hardware flash verification and network readiness were observed separately. User confirmation of perceived latency and the new voice remains necessary.
 
+## Two-screen display review
+
+Focused read-only review found no concrete renderer/layout/spec/privacy defect in the exact2screen change. It identified a verification false positive from substring matching a model path; this was corrected by reading actual service process arguments, requiring exact paths and base.en repository, and verifying model.bin against the pinned manifest. New tests reject path suffixes, wrong repositories, unverified hashes and voice suffixes. Reviewer independently rechecked the finding resolved; all115 host tests and fresh live VPS checks pass. Selection evidence does not claim new runtime precision introspection; existing SpeechEngine still configures int8. Physical panel/gesture results remain separate acceptance.
+
 ## Remaining acceptance
 
 Source review does not establish panel colors, microphone/speaker behavior, human gestures, real private notification/confirmation, shared live-record behavior or Mac-independent operation. Those remain explicit G5/G6 acceptance gates. No live family records were mutated by automated verification. The PR remains a draft and must not be merged automatically.

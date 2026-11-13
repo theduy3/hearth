@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The requested candidate was downloaded, verified and tested successfully. It is **not active**: it measured slower than the existing Whisper base.en int8 recognizer on this VPS and used substantially more resident memory. Existing Whisper/Joe services were restored and verified. Activating Q8 despite these results is a product/resource tradeoff requiring user direction; do not treat preparation as a completed backend migration.
+The requested candidate was downloaded, verified and tested successfully. It is **not active**: it measured slower than the existing Whisper base.en int8 recognizer on this VPS and used substantially more resident memory. Existing Whisper/Joe services were restored and verified. The user has explicitly chosen the lowest measured latency, so Whisper is retained and Q8 activation is cancelled. This is a completed evaluation and selection decision, not a completed Q8 backend migration.
 
 ## Pinned candidate
 
@@ -39,6 +39,6 @@ After the successful trial, actual loopback transcription and Joe16kHz speech sy
 
 Current baseline fixtures/results and trial scripts are private under `/root/catthew-parakeet-benchmark-v2`; public synthetic copies for the sandbox are under `/opt/catthew-speech/benchmark-v2`. `tools/benchmark_speech.py` now benchmarks a running loopback service with reusable public synthetic fixtures. The old repeated-sentence maximum-length fixture was replaced by a varied narrative before the comparison above; repeated text can trigger Whisper compression-ratio fallback and distort performance comparisons.
 
-The published runtime API is `transcribe_cpp.Model(path,backend="cpu")`, one lifetime `model.session(n_threads=2)`, repeated `session.run(float32_mono,timestamps="none").text`. It accepts standard-library `array('f')`; decode/validate PCM16 first. Preserve the existing service request serialization,30second limit, in-memory recordings and fail-closed behavior. Close session before model. A full Parakeet/Piper integration and an appropriate combined memory budget remain unimplemented pending the speed/quality tradeoff decision.
+The published runtime API is `transcribe_cpp.Model(path,backend="cpu")`, one lifetime `model.session(n_threads=2)`, repeated `session.run(float32_mono,timestamps="none").text`. It accepts standard-library `array('f')`; decode/validate PCM16 first. Preserve the existing service request serialization,30second limit, in-memory recordings and fail-closed behavior. Close session before model. A full Parakeet/Piper integration was not implemented: the user selected the faster measured Whisper backend. Do not reopen the Q8 activation question without new direction.
 
 Recommendation: retain Whisper for latency on this host. Do not silently select a smaller Q5/Q6 model or increase paid infrastructure; those are different choices from the requested Q8 candidate.

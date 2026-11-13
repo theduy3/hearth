@@ -12,6 +12,8 @@ This fork targets the **ESP32-S3 N16R8 Note4C with a real 400 × 300 black/white
 - **Short-press Up:** return to the previous page.
 - **Hold Down:** stop audio/display work safely and enter deep sleep. The front button wakes the device.
 
+There are exactly two screens: **Daily tasks** and **Catthew chat**. Daily tasks shows up to five overdue, due-today or undated tasks, with an overflow count. Chat shows the latest reply as a single-screen preview; long replies do not add pages. Ask Catthew for the rest of a task list or details from the calendar/notes. Either navigation direction toggles between the two screens. Hidden calendar/notes changes do not repaint these screens.
+
 The panel uses full refreshes; the user observed about15seconds for a page change, with flashing stopping once it settles. Navigation presses during a refresh are combined; recording and reply playback run independently. Recording and processing use the indicator rather than additional screen refreshes. An offline badge distinguishes a cached page from current data.
 
 ## Household scope
@@ -71,7 +73,7 @@ Writing additionally requires `--write`, a private verified full factory backup,
 
 ## Voice and latency
 
-The local Piper voice is Joe (`en_US-joe-medium`, male US-English, CC0 dataset). Whisper remains base.en int8. The requested731MB Parakeet Unified Q8 candidate was prepared and tested but is inactive: it measured slower and used more resident memory on this VPS. See [measurements and pending tradeoff](docs/PARAKEET-BENCHMARK.md). Active requests and completed text awaiting audio poll every500ms; idle/terminal requests poll every5seconds. A regression trace covers the completion boundary that previously caused a five-second wait for ready audio.
+The local Piper voice is Joe (`en_US-joe-medium`, male US-English, CC0 dataset). Whisper remains base.en int8. The requested731MB Parakeet Unified Q8 candidate was prepared and tested but is inactive: it measured slower and used more resident memory on this VPS. The user chose the lowest measured latency, so Whisper is retained. See [measurements and decision](docs/PARAKEET-BENCHMARK.md). Active requests and completed text awaiting audio poll every500ms; idle/terminal requests poll every5seconds. A regression trace covers the completion boundary that previously caused a five-second wait for ready audio.
 
 `tools.voice_smoke` reports upload, audio-ready/download timings and status transitions without transcript or reply text. Current measured VPS audio readiness is about4.3–4.4seconds; this is not an end-to-end device latency measurement.
 

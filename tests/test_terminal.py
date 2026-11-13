@@ -63,14 +63,21 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(self.agent_calls, [])
 
     def test_frame_transport_is_exact_and_unchanged_frames_have_no_body(self):
-        with self.request("/v1/frame?page=tasks:0") as response:
+        with self.request("/v1/frame?page=today") as response:
             self.assertEqual(len(response.read()), 30000)
             self.assertEqual(response.headers["Content-Type"], "application/vnd.catthew.bwry2")
-            self.assertEqual(response.headers["X-Hearth-Page"], "tasks:0")
-            self.assertTrue(response.headers["X-Hearth-Next"])
+            self.assertEqual(response.headers["X-Hearth-Page"], "today")
+            self.assertEqual(response.headers["X-Hearth-Next"], "reply:0")
+            self.assertEqual(response.headers["X-Hearth-Previous"], "reply:0")
+            self.assertEqual(response.headers["X-Hearth-Pages"], "2")
             etag = response.headers["ETag"]
+        with self.request("/v1/frame?page=reply:0") as response:
+            self.assertEqual(response.headers["X-Hearth-Page"], "reply:0")
+            self.assertEqual(response.headers["X-Hearth-Next"], "today")
+            self.assertEqual(response.headers["X-Hearth-Previous"], "today")
+            self.assertEqual(response.headers["X-Hearth-Pages"], "2")
         with self.assertRaises(HTTPError) as caught:
-            self.request("/v1/frame?page=tasks:0", headers={"If-None-Match": etag})
+            self.request("/v1/frame?page=today", headers={"If-None-Match": etag})
         self.assertEqual(caught.exception.code, 304)
         self.assertEqual(caught.exception.read(), b"")
         caught.exception.close()

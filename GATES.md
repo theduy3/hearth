@@ -17,10 +17,10 @@ Scope: Implement the approved color voice terminal, preserving Catthew identity 
 - [x] G3: Digest-pinned ESP-IDF6.1 builds the native BWRY firmware; actual driver, PCM protocol and button timing have host regression coverage
   EVIDENCE: run43374130066 succeeded at9fd1f981c10cf14038702185dbeeef35e3da802a (SDK and108 Linux host tests); current artifact flashed/hardware-verified, NVS preserved and authenticated network readiness confirmed; pending-audio latency regression passes.
 
-- [x] G4: Supervised VPS services use user-selected ChatGPT Terra6.1, unchanged SOUL, restricted tools and authenticated TLS color frames
+- [x] G4: Supervised VPS services use user-selected ChatGPT Terra6.1, unchanged SOUL, restricted tools, measured faster Whisper and exactly two authenticated TLS color screens
   CHECK: python3 tools/verify_vps.py --soul-sha256 4ef56b0716db7006c89862fa9019c430d6b7b7a93b0b058c682f46615e2702f0
   EXPECT: VPS_VERIFIED
-  EVIDENCE: user explicitly selected gpt-6.1-terra; fresh verify_vps check exits0 with all checks true and VPS_VERIFIED, including selected model/provider, unchanged SOUL, scoped tools, male speech, frames/TLS, Telegram and owned supervision.
+  EVIDENCE: user explicitly selected gpt-6.1-terra and the lowest measured STT latency (Whisper). Fresh verify_vps exits0 with all checks true/VPS_VERIFIED: two_page_navigation, selected model/provider, unchanged SOUL, scoped tools, male speech, frames/TLS, Telegram and owned supervision.115host tests pass for the two-screen renderer, visible-data ETag stability, frame transport and exact speech-process argument/model-hash checks.
 
 - [x] G5A: The private16MiB original image retains its checksum and recorded successful hardware verify-flash result
   CHECK: python3 tools/verify_factory_backup.py

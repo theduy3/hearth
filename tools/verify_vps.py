@@ -33,6 +33,11 @@ connection.request('GET','/v1/frame?page=today',headers={'Authorization':'Bearer
 response=connection.getresponse();pixels=response.read(30001)
 checks['authenticated_color_frame']=response.status==200 and len(pixels)==30000 and response.getheader('ETag')=='"'+hashlib.sha256(pixels).hexdigest()+'"'
 checks['frame_navigation_headers']=all(response.getheader(name) for name in ('X-Hearth-Page','X-Hearth-Next','X-Hearth-Previous'))
+checks['two_page_navigation']=(response.getheader('X-Hearth-Page')=='today' and response.getheader('X-Hearth-Next')=='reply:0' and response.getheader('X-Hearth-Previous')=='reply:0' and response.getheader('X-Hearth-Pages')=='2')
+connection.close()
+connection.request('GET','/v1/frame?page=reply:0',headers={'Authorization':'Bearer '+setting(raw,'HEARTH_DEVICE_TOKEN')})
+response=connection.getresponse();pixels=response.read(30001)
+checks['two_page_navigation']=checks['two_page_navigation'] and response.status==200 and len(pixels)==30000 and response.getheader('ETag')=='"'+hashlib.sha256(pixels).hexdigest()+'"' and response.getheader('X-Hearth-Page')=='reply:0' and response.getheader('X-Hearth-Next')=='today' and response.getheader('X-Hearth-Previous')=='today' and response.getheader('X-Hearth-Pages')=='2'
 connection.close()
 owned=[]
 for path in Path('/proc').iterdir():
@@ -44,6 +49,37 @@ for path in Path('/proc').iterdir():
 checks['owned_single_service_process']=owned==[True]
 print(json.dumps(checks))
 '''
+
+
+HOST_SPEECH = r'''
+import hashlib,json,subprocess
+from pathlib import Path
+pid=subprocess.check_output(['systemctl','show','catthew-speech.service','-p','MainPID','--value'],text=True).strip()
+argv=Path('/proc/'+pid+'/cmdline').read_bytes().decode().split(chr(0))
+def option(name):
+ if argv.count(name)!=1:return None
+ i=argv.index(name)
+ return argv[i+1] if i+1<len(argv) else None
+whisper=option('--whisper-model');voice=option('--voice-model')
+repo=None;pinned=False
+if whisper=='/opt/catthew-speech/models-joe/whisper':
+ manifest=json.loads((Path(whisper).parent/'manifest.json').read_text())
+ repo=manifest.get('whisper_repo')
+ path=Path(whisper)/'model.bin'
+ expected=next((x['sha256'] for x in manifest['artifacts'] if x['path']==str(path)),None)
+ digest=hashlib.sha256()
+ with path.open('rb') as f:
+  for block in iter(lambda:f.read(1024*1024),b''):digest.update(block)
+ pinned=expected is not None and digest.hexdigest()==expected
+print(json.dumps({'whisper':whisper,'voice':voice,'repo':repo,'pinned':pinned}))
+'''
+
+
+def speech_selection(metadata):
+    return {
+        'male_voice_selected': metadata.get('voice') == '/opt/catthew-speech/models-joe/voices/en/en_US/joe/medium/en_US-joe-medium.onnx',
+        'whisper_base_selected': metadata.get('whisper') == '/opt/catthew-speech/models-joe/whisper' and metadata.get('repo') == 'Systran/faster-whisper-base.en' and metadata.get('pinned') is True,
+    }
 
 
 def main():
@@ -66,8 +102,8 @@ def main():
     remote = json.loads(result.stdout)
     services = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "bluehost", "systemctl", "is-active", "catthew-terminal.service", "catthew-speech.service"], text=True, capture_output=True, timeout=15)
     checks["supervised_services_active"] = services.returncode == 0 and services.stdout.split() == ["active", "active"]
-    voice = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "bluehost", "systemctl", "show", "catthew-speech.service", "-p", "ExecStart", "--value"], text=True, capture_output=True, timeout=15)
-    checks["male_voice_selected"] = voice.returncode == 0 and "/models-joe/voices/en/en_US/joe/medium/en_US-joe-medium.onnx" in voice.stdout
+    voice = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "bluehost", "python3", "-"], input=HOST_SPEECH, text=True, capture_output=True, check=True, timeout=20)
+    checks.update(speech_selection(json.loads(voice.stdout)))
     checks["soul_unchanged"] = remote.pop("soul_sha256") == args.soul_sha256
     checks.update(remote)
     print(json.dumps(checks, sort_keys=True))

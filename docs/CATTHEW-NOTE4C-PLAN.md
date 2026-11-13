@@ -6,7 +6,7 @@ Status: APPROVED — canvas verdict fb-65 and subsequent user message "approved 
 
 Modify the cloned Hearth project into a color Note4C voice/display terminal for the existing Hermes profile `catthew` on the Bluehost VPS. Preserve the existing Catthew SOUL as the identity anchor. Keep the runtime, speech endpoint, household integrations, and persistent data on the VPS. The Mac is a development, USB provisioning, and recovery workstation only. Telegram and CLI remain channels to the same profile.
 
-The terminal should show household tasks, events, and useful tagged family notes. Catthew processes English requests and returns a concise text reply plus an updated display. Calendar is **Kittyggup Family**, timezone **America/Vancouver**. Preserve existing `catthew` task selection and creation rules; make exact `kittyggup`-tagged reference notes available for family questions. Use household-scoped capabilities and a distinct persistent Note4C conversation; preserve Telegram and CLI access to the same Catthew identity and household records.
+The terminal has exactly two screens per the latest user direction: daily tasks and agent chat. Household events and tagged family notes remain available through Catthew rather than standalone display pages. Catthew processes English requests and returns a concise text reply plus an updated display. Calendar is **Kittyggup Family**, timezone **America/Vancouver**. Preserve existing `catthew` task selection and creation rules; make exact `kittyggup`-tagged reference notes available for family questions. Use household-scoped capabilities and a distinct persistent Note4C conversation; preserve Telegram and CLI access to the same Catthew identity and household records.
 
 The intended model is **ChatGPT Terra6.1**, exact identifier `openai-codex` / `gpt-6.1-terra`, per the user's latest explicit selection, superseding the earlier Sol choice. Do not substitute another model or create new provider credentials. Preserve SOUL throughout.
 
@@ -78,7 +78,7 @@ A device credential authorizes a household terminal, not a particular person. Or
 
 - Calendar: target the existing family calendar by verified ID, using America/Vancouver unless corrected. Read recurring events, all-day events, cancellations, timezones, and DST correctly.
 - Tasks: reuse the existing vault schema and Catthew task workflow. Use stable note/task IDs, retain calendar event IDs where present, and reconcile existing links before creating anything.
-- Family notes: parse exact YAML/body tags for the agreed `kittyggup` scope. Do not project the entire vault. Tagged reference notes should be searchable by Catthew; the small display should show a useful subset rather than every document.
+- Family notes: parse exact YAML/body tags for the agreed `kittyggup` scope. Do not project the entire vault. Tagged reference notes should be searchable by Catthew; relevant answers appear on the chat screen rather than a separate notes screen.
 - Settled visibility: existing `catthew` tasks plus exact `kittyggup`-tagged reference notes, following the recommendation attached to canvas annotation fb-57. No mass retagging. Existing dated-task/calendar links remain intact. This selects the canvas recommendation; it does not silently include all tasks in the vault.
 - Reuse the existing dated-task-to-calendar behavior. Do not install a second competing automatic synchronizer. Ordinary calendar events do not automatically become duplicate tasks.
 - Hub display data is a rebuildable cache. Changes from Telegram/CLI and manual calendar/vault edits must appear without a voice request. Use bounded periodic source refresh plus immediate refresh after verified writes; external edits need no agent turn per poll.
@@ -93,7 +93,7 @@ Hearth's current 4bpp API is grayscale, not four-color. Its default BUSY timeout
 
 Existing physical behavior is front GPIO0, active low, 450 ms long-press threshold, recording until release, at most 12 seconds, 16 kHz mono PCM16 WAV. Codec startup adds latency; show a ready cue before speaking. Decide whether 12 seconds is sufficient for Catthew conversation. Historical `docs/VOICE.md` has stale navigation information; current source is authoritative.
 
-Proposed home screen: Today’s agenda, overdue/today tasks, and the most recent Catthew reply. Secondary pages: upcoming agenda, family tasks, and selected notes. Black for main text, red for overdue/urgent content, yellow for upcoming/highlighted content, white background. Pair color with labels/icons.
+User-selected display: exactly two screens, Daily tasks (`today`) and Catthew chat (`reply:0`). Show up to five overdue/due-today/undated tasks with an overflow count and a single-screen latest-reply preview; no extra pagination. Calendar and notes are available through agent questions. Both navigation directions toggle between these views. Black for main text, red for overdue/urgent content, yellow for highlights, white background. Pair color with labels/icons.
 
 Batch changes and repaint only when visible content changes or the selected page changes. Account for the slow full-refresh panel. Use immediate LED/beep feedback during recording/processing rather than repeated screen refreshes. Never interrupt a display waveform unsafely to capture speech; confirm whether the actual driver permits recording while refresh runs.
 

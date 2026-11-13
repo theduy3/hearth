@@ -8,7 +8,7 @@ All `/v1/*` requests require the dedicated `Authorization: Bearer …` device cr
 
 `GET /v1/frame?page=today` returns `application/vnd.catthew.bwry2`, exactly30,000 bytes: 400×300, row-major100 bytes/row, leftmost pixel in bits7–6. Indices are black00, white01, yellow10, red11. Thus black/white/red/yellow pack as `0x1e`; solid black/white/yellow/red are `00/55/aa/ff`.
 
-Headers: quoted `ETag` is SHA256 of the body; `X-Hearth-Page` is the resolved opaque page ID; `X-Hearth-Next` and `X-Hearth-Previous` are neighboring IDs; `X-Hearth-Pages` is the current count. IDs are bounded32-character ASCII values. Send `If-None-Match` only for the matching cached page; unchanged frames return304 with no body. A removed page resolves to Today. `reply:0` always selects the first answer page.
+Headers: quoted `ETag` is SHA256 of the body; `X-Hearth-Page` is the resolved opaque page ID; `X-Hearth-Next` and `X-Hearth-Previous` are neighboring IDs; `X-Hearth-Pages` is always2: `today` is the daily task screen, `reply:0` is the chat screen. Both next and previous point to the other screen. Each screen is a bounded preview; long lists/replies never create additional pages. IDs are bounded32-character ASCII values. Send `If-None-Match` only for the matching cached page; unchanged frames return304 with no body. A removed page resolves to Today. `reply:0` always selects the single chat screen.
 
 The front short press advances pages; side up/down navigate previous/next. Buttons never approve actions. A recognized hold records until release or30seconds; an empty/short recording is not converted into a page turn. Give immediate indicator feedback; steady illumination means capture is ready.
 

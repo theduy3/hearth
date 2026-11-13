@@ -46,19 +46,41 @@ class FrameTests(unittest.TestCase):
         self.assertEqual(first.pixels, again.pixels)
         self.assertEqual(first.etag, hashlib.sha256(first.pixels).hexdigest())
 
-    def test_navigation_covers_all_task_pages_and_returns_home(self):
+    def test_navigation_is_exactly_daily_tasks_and_chat_even_with_overflow(self):
         renderer = Renderer()
         view = fixture()
-        key, seen = "today", []
-        while key not in seen:
-            seen.append(key)
-            frame = renderer.render(view, key, now=NOW)
-            self.assertEqual(frame.page, key)
-            self.assertEqual(len(frame.pixels), 30000)
-            key = frame.next_page
-        self.assertEqual(key, "today")
-        self.assertTrue({"tasks:0", "tasks:1", "tasks:2"}.issubset(seen))
-        self.assertEqual(frame.pages, len(seen))
+        view["reply"] = "A long response with useful family details. " * 100
+        view["tasks"] *= 20
+        daily = renderer.render(view, "today", now=NOW)
+        chat = renderer.render(view, daily.next_page, now=NOW)
+        self.assertEqual((daily.page, chat.page), ("today", "reply:0"))
+        self.assertEqual((daily.next_page, daily.previous_page), ("reply:0", "reply:0"))
+        self.assertEqual((chat.next_page, chat.previous_page), ("today", "today"))
+        self.assertEqual((daily.pages, chat.pages), (2, 2))
+        self.assertEqual(len(daily.pixels), 30000)
+        self.assertEqual(len(chat.pixels), 30000)
+
+    def test_daily_tasks_show_due_today_overdue_and_undated_but_not_future(self):
+        renderer = Renderer()
+        view = fixture()
+        view["tasks"] = [{"title": "Overdue", "due": "2026-11-11"},
+                         {"title": "Due today", "due": "2026-11-12"},
+                         {"title": "Undated", "due": ""},
+                         {"title": "Check invalid date", "due": "not-a-date"}]
+        original = renderer.render(view, "today", now=NOW).pixels
+        view["tasks"].append({"title": "Future task", "due": "2026-11-13"})
+        self.assertEqual(renderer.render(view, "today", now=NOW).pixels, original)
+        view["tasks"][1]["title"] = "Changed task for today"
+        self.assertNotEqual(renderer.render(view, "today", now=NOW).pixels, original)
+
+    def test_hidden_calendar_and_notes_changes_do_not_refresh_either_page(self):
+        renderer = Renderer()
+        view = fixture()
+        before = {key: renderer.render(view, key, now=NOW).etag for key in ("today", "reply:0")}
+        view["events"] = [{"summary": "Future family event"}] * 100
+        view["notes"] *= 100
+        after = {key: renderer.render(view, key, now=NOW).etag for key in before}
+        self.assertEqual(before, after)
 
     def test_source_errors_and_unknown_outcomes_are_visibly_distinct(self):
         renderer = Renderer()
@@ -73,8 +95,8 @@ class FrameTests(unittest.TestCase):
 
     def test_unicode_and_long_words_render_without_invalid_palette_values(self):
         view = fixture()
-        view["notes"][0]["text"] += " rất quan trọng " * 80
-        result = Renderer().render(view, "notes:0", now=NOW)
+        view["reply"] = "Gia đình · Chuẩn bị đồ dùng rất quan trọng " * 80 + "x" * 300
+        result = Renderer().render(view, "reply:0", now=NOW)
         self.assertEqual(len(result.pixels), 30000)
 
 
