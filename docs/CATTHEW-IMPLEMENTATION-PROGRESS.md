@@ -2,13 +2,13 @@
 
 Approval: canvas fb-65 and user message “approved plan”. Source of truth: `docs/CATTHEW-NOTE4C-PLAN.md`.
 
-Workspace: `/Users/theduy/Repo/hearth-catthew-note4c`, branch `feat/catthew-note4c`, base `edd75fd7ea7e9879b141a84aa39ce2c74b6c92bc`. Fork: https://github.com/theduy3/hearth. Draft PR: https://github.com/theduy3/hearth/pull/1. No automatic merge.
+Workspace: `/Users/theduy/Repo/hearth-catthew-note4c`, branch `feat/catthew-note4c`, base `edd75fd7ea7e9879b141a84aa39ce2c74b6c92bc`. Fork: https://github.com/theduy3/zectrix-note4c-catthew. Draft PR: https://github.com/theduy3/zectrix-note4c-catthew/pull/1. No automatic merge.
 
 ## Verified delivery checkpoint
 
-- Latest correction `41c302d` passes both SDK/native build and105 Linux host tests in [run43364193431](https://github.com/theduy3/hearth/actions/runs/43364193431). That artifact was reflashed without NVS erasure and all written regions verified. USB remains configured=false; private current log is `builds/41c302d/flash.log`. Firmware app SHA256: `d3519e1abf36059b60b31296b3def9a07ba41183356c00a8aad3ffc62208bcad`.
+- Latest correction `41c302d` passes both SDK/native build and105 Linux host tests in [run43364193431](https://github.com/theduy3/zectrix-note4c-catthew/actions/runs/43364193431). That artifact was reflashed without NVS erasure and all written regions verified. USB remains configured=false; private current log is `builds/41c302d/flash.log`. Firmware app SHA256: `d3519e1abf36059b60b31296b3def9a07ba41183356c00a8aad3ffc62208bcad`.
 - Backend checkpoint `3776740`, projector firmware `ec40016`, lifecycle fixes `b20ab90` and provisioning/build recovery `d3acefa` were pushed.
-- [Firmware run43360727456](https://github.com/theduy3/hearth/actions/runs/43360727456) built source `d3acefaaa294c93e97128c94b0afe5939f6ea1db` successfully with the digest-pinned ESP-IDF6.1 image. cJSON is an explicit pinned managed component; no compiled Wi-Fi or token settings.
+- [Firmware run43360727456](https://github.com/theduy3/zectrix-note4c-catthew/actions/runs/43360727456) built source `d3acefaaa294c93e97128c94b0afe5939f6ea1db` successfully with the digest-pinned ESP-IDF6.1 image. cJSON is an explicit pinned managed component; no compiled Wi-Fi or token settings.
 - The actual backed-up Note4C was flashed from that artifact. Bootloader, partition table and application all passed hardware verify-flash. Local private log: `$HOME/.local/share/catthew-note4c/builds/d3acefa/flash.log`. USB application protocol answers with the expected MAC and `configured=false`.
 - Full original flash remains private,16,777,216 bytes, SHA256 `5fdd603eb016137b4535ac9d169b58c4bf815580e6a3e0329b0e1431a93b6c41`; original hardware comparison and fresh local checksum/permission verification pass. No credentials have been provisioned yet.
 - Current host suite: **105 tests pass in Linux CI** after deleting the obsolete standalone board/LAN/model/simulator stack and its dedicated tests. The current button timing coverage was preserved as a standalone native test. Immediately before that removal, all147 tests plus4 provisioning tests passed.

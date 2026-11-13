@@ -1,4 +1,4 @@
-# Hearth · Catthew Note4C
+# zectrix-note4c-catthew
 
 A four-color household voice terminal for the existing Catthew Hermes profile. The Zectrix Note4C handles buttons, microphone, speaker and display. Bluehost runs Hermes, speech recognition, speech synthesis, household tools and screen rendering, so the Mac is needed only for setup and development.
 
@@ -29,7 +29,7 @@ The household MCP exposes scoped record operations. It does not expose a shell, 
 
 ## Current verified checkpoint
 
-The firmware at `9fd1f981c10cf14038702185dbeeef35e3da802a` built with the pinned ESP-IDF 6.1 toolchain in [Actions run 43374130066](https://github.com/theduy3/hearth/actions/runs/43374130066). Its bootloader, partition table and application were flashed and verified on the backed-up Note4C. The device retains its pairing and passes Wi-Fi/time/authenticated-frame readiness. User has confirmed task pages and working voice chat.
+Installed firmware `09d1fa2e92dc437be0192ca489561b47c5a9d627` built with the pinned ESP-IDF 6.1 toolchain in [Actions run 43392558966](https://github.com/theduy3/zectrix-note4c-catthew/actions/runs/43392558966). Its bootloader, partition table and application were identity-checked, flashed and verified on the backed-up Note4C with pairing retained. Wi-Fi/time/authenticated-frame readiness passed. Backend `b0d61ce` and all137tests also passed [run43397344604](https://github.com/theduy3/zectrix-note4c-catthew/actions/runs/43397344604). Earlier user evidence confirmed the full-color settling waveform and voice; current physical request-directed navigation remains part of acceptance.
 
 The HTTPS backend, native color frames, restricted model path, unchanged SOUL, speech service and Catthew Telegram connection pass release checks. A fresh synthetic English voice round trip returns text and 16 kHz speaker audio. **Male-voice/latency confirmation, interruption/Mac-asleep acceptance and individually confirmed live household write/approval tests remain pending.** See [GATES.md](GATES.md) for the distinction between automatic and human evidence.
 
@@ -75,7 +75,7 @@ Writing additionally requires `--write`, a private verified full factory backup,
 
 The local Piper voice is Joe (`en_US-joe-medium`, male US-English, CC0 dataset). Whisper remains base.en int8. The requested731MB Parakeet Unified Q8 candidate was prepared and tested but is inactive: it measured slower and used more resident memory on this VPS. The user chose the lowest measured latency, so Whisper is retained. See [measurements and decision](docs/PARAKEET-BENCHMARK.md). Active requests and completed text awaiting audio poll every500ms; idle/terminal requests poll every5seconds. A regression trace covers the completion boundary that previously caused a five-second wait for ready audio.
 
-`tools.voice_smoke` reports upload, audio-ready/download timings and status transitions without transcript or reply text. Current measured VPS audio readiness is about4.3–4.4seconds; this is not an end-to-end device latency measurement.
+`tools.voice_smoke` reports upload, audio-ready/download timings and status transitions without transcript or reply text. Measured VPS audio readiness for the synthetic greeting was about4.3–4.4seconds. A later read-only task query including record access and page selection took22.4seconds. These are different workloads and neither measures end-to-end physical-device latency.
 
 ## VPS operation
 
@@ -101,6 +101,6 @@ The voice smoke test uses a synthetic greeting and creates no family records. Af
 - [Device protocol and native pixel format](docs/NOTE4C-PROTOCOL.md)
 - [Acceptance gates](GATES.md)
 - [Standards and specification source review](docs/NOTE4C-REVIEW.md)
-- [Draft PR #1](https://github.com/theduy3/hearth/pull/1), with no automatic merge
+- [Draft PR #1](https://github.com/theduy3/zectrix-note4c-catthew/pull/1), with no automatic merge
 
 Unmodified DejaVu fonts and their attribution are in [assets/fonts/](assets/fonts/). Speech dependencies and pinned model provenance are maintained separately by the speech preparation tools; the Piper engine is GPLv3 and is not vendored into the firmware.
