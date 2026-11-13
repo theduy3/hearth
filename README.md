@@ -27,7 +27,7 @@ The household MCP exposes scoped record operations. It does not expose a shell, 
 
 ## Current verified checkpoint
 
-The firmware at `d3acefaaa294c93e97128c94b0afe5939f6ea1db` built with the pinned ESP-IDF 6.1 toolchain in [Actions run 43360727456](https://github.com/theduy3/hearth/actions/runs/43360727456). Its bootloader, partition table and application were flashed and verified on the backed-up Note4C. USB reports the expected device identity and an unconfigured device.
+The firmware at `41c302dde153b2f0f68b795b82d5f3caec6c68d0` built with the pinned ESP-IDF 6.1 toolchain in [Actions run 43364193431](https://github.com/theduy3/hearth/actions/runs/43364193431). Its bootloader, partition table and application were flashed and verified on the backed-up Note4C. USB reports the expected device identity and an unconfigured device.
 
 The HTTPS backend, native color frames, restricted model path, unchanged SOUL, speech service and Catthew Telegram connection pass release checks. A fresh synthetic English voice round trip returns text and 16 kHz speaker audio. **Physical color/audio/button acceptance and individually confirmed live household write/approval tests remain pending.** See [GATES.md](GATES.md) for the distinction between automatic and human evidence.
 
@@ -57,11 +57,11 @@ Native C++ tests compile the actual e-paper driver against trace stubs and check
 
 [The firmware workflow](.github/workflows/firmware.yml) pins the ESP-IDF 6.1 container by digest and emits a checksummed manifest with build artifacts. It requires no credentials. Avoid installing a large SDK on the Mac or compiling on the production VPS.
 
-Verify a downloaded artifact before writing:
+Verify a downloaded artifact before writing. Pass the directory containing `note4c-manifest.json`:
 
 ```bash
 python3 -m tools.flash_note4c \
-  --artifact-dir /private/path/to/note4c-firmware \
+  --artifact-dir /private/path/to/note4c-firmware/build \
   --expect-commit FULL_COMMIT_SHA
 ```
 
@@ -90,6 +90,7 @@ The voice smoke test uses a synthetic greeting and creates no family records. Af
 - [Implementation ledger](docs/CATTHEW-IMPLEMENTATION-PROGRESS.md)
 - [Device protocol and native pixel format](docs/NOTE4C-PROTOCOL.md)
 - [Acceptance gates](GATES.md)
+- [Standards and specification source review](docs/NOTE4C-REVIEW.md)
 - [Draft PR #1](https://github.com/theduy3/hearth/pull/1), with no automatic merge
 
 Unmodified DejaVu fonts and their attribution are in [assets/fonts/](assets/fonts/). Speech dependencies and pinned model provenance are maintained separately by the speech preparation tools; the Piper engine is GPLv3 and is not vendored into the firmware.
