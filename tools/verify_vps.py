@@ -33,11 +33,11 @@ connection.request('GET','/v1/frame?page=today',headers={'Authorization':'Bearer
 response=connection.getresponse();pixels=response.read(30001)
 checks['authenticated_color_frame']=response.status==200 and len(pixels)==30000 and response.getheader('ETag')=='"'+hashlib.sha256(pixels).hexdigest()+'"'
 checks['frame_navigation_headers']=all(response.getheader(name) for name in ('X-Hearth-Page','X-Hearth-Next','X-Hearth-Previous'))
-checks['two_page_navigation']=(response.getheader('X-Hearth-Page')=='today' and response.getheader('X-Hearth-Next')=='reply:0' and response.getheader('X-Hearth-Previous')=='reply:0' and response.getheader('X-Hearth-Pages')=='2')
+checks['two_page_navigation']=(response.getheader('X-Hearth-Page')=='today' and response.getheader('X-Hearth-Next')=='groceries' and response.getheader('X-Hearth-Previous')=='groceries' and response.getheader('X-Hearth-Pages')=='2')
 connection.close()
-connection.request('GET','/v1/frame?page=reply:0',headers={'Authorization':'Bearer '+setting(raw,'HEARTH_DEVICE_TOKEN')})
+connection.request('GET','/v1/frame?page=groceries',headers={'Authorization':'Bearer '+setting(raw,'HEARTH_DEVICE_TOKEN')})
 response=connection.getresponse();pixels=response.read(30001)
-checks['two_page_navigation']=checks['two_page_navigation'] and response.status==200 and len(pixels)==30000 and response.getheader('ETag')=='"'+hashlib.sha256(pixels).hexdigest()+'"' and response.getheader('X-Hearth-Page')=='reply:0' and response.getheader('X-Hearth-Next')=='today' and response.getheader('X-Hearth-Previous')=='today' and response.getheader('X-Hearth-Pages')=='2'
+checks['two_page_navigation']=checks['two_page_navigation'] and response.status==200 and len(pixels)==30000 and response.getheader('ETag')=='"'+hashlib.sha256(pixels).hexdigest()+'"' and response.getheader('X-Hearth-Page')=='groceries' and response.getheader('X-Hearth-Next')=='today' and response.getheader('X-Hearth-Previous')=='today' and response.getheader('X-Hearth-Pages')=='2'
 connection.close()
 owned=[]
 for path in Path('/proc').iterdir():

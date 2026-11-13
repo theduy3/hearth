@@ -1,4 +1,4 @@
-"""Render two family views on the VPS; the Note4C projects four-color pixels."""
+"""Render tasks and groceries on the VPS; replies are spoken by the Note4C."""
 from __future__ import annotations
 
 import hashlib
@@ -10,6 +10,8 @@ from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+
+from hub.household import event_elapsed
 
 WIDTH, HEIGHT = 400, 300
 BLACK, WHITE, YELLOW, RED = 0, 1, 2, 3
@@ -118,17 +120,20 @@ class Renderer:
         _font(24, True)
 
     def render(self, view, page, *, now):
-        # These are the device's existing opaque IDs, with exactly two views.
-        chat = page == "reply:0"
-        key, neighbor = ("reply:0", "today") if chat else ("today", "reply:0")
+        pages = ("today", "groceries")
+        selected = pages.index(page) if page in pages else 0
+        key = pages[selected]
         image = _image()
         draw = ImageDraw.Draw(image)
         draw.fontmode = "1"
-        _text(draw, 16, 12, "Catthew chat" if chat else "Daily tasks", size=24, bold=True, width=270)
+        titles = {"today": "Tasks", "groceries": "Grocery Shopping"}
+        _text(draw, 16, 12, titles[key], size=24, bold=True, width=270)
         _text(draw, 292, 17, now.strftime("%a, %b %-d"), size=12, width=94)
         draw.rectangle((16, 44, 383, 46), fill=YELLOW)
-        if not chat:
-            tasks = [task for task in view.get("tasks", []) if _due(task) is None or _due(task) <= now.date()]
+        if key == "today":
+            tasks = [task for task in view.get("tasks", [])
+                     if task.get("status") not in ("completed", "done", "cancelled")
+                     and not event_elapsed(task, now) and (_due(task) is None or _due(task) <= now.date())]
             tasks.sort(key=lambda task: (_due(task) or date.max, task.get("title", "")))
             count = len(tasks)
             label = f"Showing 5 of {count} · ask Catthew for more" if count > 5 else f"Today, overdue & undated · {count}"
@@ -137,28 +142,39 @@ class Renderer:
                 self._task(draw, task, 77 + index * 34, now)
             if not tasks:
                 _text(draw, 16, 90, "Nothing due today.", size=20)
-        else:
-            request = view.get("request") or {}
-            failed = request.get("status") in ("failed", "uncertain")
-            reply = ("This request could not be confirmed. Check the current records before repeating it."
-                     if failed else view.get("reply") or "Hold the front button. Speak while the indicator stays lit, then release to send.")
-            if failed:
-                draw.rectangle((16, 54, 383, 80), fill=RED)
-                _text(draw, 24, 59, "Please check this request", size=14, bold=True, color=WHITE)
-            _text(draw, 16, 91 if failed else 66, reply, size=16, rows=7 if failed else 9)
-        if view.get("stale"):
+        elif key == "groceries":
+            items = [item for item in view.get("groceries", []) if item.get("state") == "needed"]
+            label = f"Showing 7 of {len(items)} · ask Catthew for more" if len(items) > 7 else f"{len(items)} items to buy"
+            _text(draw, 16, 57, label, size=12)
+            for index, item in enumerate(items[:7]):
+                y = 79 + index * 24
+                draw.rectangle((16, y + 3, 27, y + 14), outline=BLACK)
+                _text(draw, 36, y, item.get("item"), size=16, width=346)
+            if not items:
+                _text(draw, 16, 90, "Ask Catthew to add groceries.", size=18, rows=2)
+        if (view.get("request") or {}).get("status") in ("failed", "uncertain"):
+            draw.rectangle((16, 249, 383, 269), fill=RED)
+            warning = "Request unconfirmed · check before repeating"
+            if view.get("stale"):
+                warning = "Request unconfirmed · saved data · check records"
+            _text(draw, 23, 252, warning, size=11, color=WHITE, width=354)
+        elif view.get("reply_speech_status") == "failed":
+            draw.rectangle((16, 249, 383, 269), fill=YELLOW)
+            warning = ("Spoken reply unavailable · showing saved data" if view.get("stale")
+                       else "Spoken reply unavailable · check current records")
+            _text(draw, 23, 252, warning, size=11, width=354)
+        elif view.get("stale"):
             draw.rectangle((16, 249, 383, 269), fill=YELLOW)
             _text(draw, 23, 252, "Some records unavailable · showing saved data", size=11, width=354)
-        elif chat and view.get("reply_speech_status") == "failed":
-            draw.rectangle((16, 249, 383, 269), fill=YELLOW)
-            _text(draw, 23, 252, "Spoken reply unavailable · answer shown above", size=11, width=354)
         elif view.get("approval_pending"):
             _text(draw, 16, 252, "Calendar approval waiting in Telegram", size=12, color=RED)
         draw.line((16, 274, 383, 274), fill=BLACK)
-        _text(draw, 16, 282, "Tap for tasks · 2/2" if chat else "Tap for chat · 1/2", size=11, width=285)
+        following, previous = pages[(selected + 1) % len(pages)], pages[(selected - 1) % len(pages)]
+        label = {"today": "tasks", "groceries": "groceries"}[following]
+        _text(draw, 16, 282, f"Tap for {label} · {selected + 1}/2", size=11, width=285)
         # The device overlays its small OFFLINE badge in this reserved area.
         pixels = pack_frame(image)
-        return Frame(pixels, hashlib.sha256(pixels).hexdigest(), key, neighbor, neighbor, 2)
+        return Frame(pixels, hashlib.sha256(pixels).hexdigest(), key, following, previous, 2)
 
     @staticmethod
     def _task(draw, task, y, now):

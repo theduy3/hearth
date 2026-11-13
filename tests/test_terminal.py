@@ -32,6 +32,8 @@ class TerminalTests(unittest.TestCase):
         self.household = SimpleNamespace(
             tasks=lambda: [{"id": "task", "title": "Family task", "status": "open"}],
             reference_notes=lambda: [],
+            complete_past_events=lambda **kw: [],
+            groceries=lambda: {"items": [], "revision": ""},
             calendar=SimpleNamespace(list_events=lambda *a: [], delete_event=lambda **kw: self.deletions.append(kw), edit_event=lambda **kw: self.deletions.append(kw)))
         self.speech = SimpleNamespace(transcribe=lambda data: "Add milk", synthesize=lambda text: wrap_pcm16(b"\0\0" * 800))
         self.state = TerminalState(self.journal, self.approvals, self.household, SimpleNamespace(turn=turn), self.speech,
@@ -67,12 +69,12 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(len(response.read()), 30000)
             self.assertEqual(response.headers["Content-Type"], "application/vnd.catthew.bwry2")
             self.assertEqual(response.headers["X-Hearth-Page"], "today")
-            self.assertEqual(response.headers["X-Hearth-Next"], "reply:0")
-            self.assertEqual(response.headers["X-Hearth-Previous"], "reply:0")
+            self.assertEqual(response.headers["X-Hearth-Next"], "groceries")
+            self.assertEqual(response.headers["X-Hearth-Previous"], "groceries")
             self.assertEqual(response.headers["X-Hearth-Pages"], "2")
             etag = response.headers["ETag"]
-        with self.request("/v1/frame?page=reply:0") as response:
-            self.assertEqual(response.headers["X-Hearth-Page"], "reply:0")
+        with self.request("/v1/frame?page=groceries") as response:
+            self.assertEqual(response.headers["X-Hearth-Page"], "groceries")
             self.assertEqual(response.headers["X-Hearth-Next"], "today")
             self.assertEqual(response.headers["X-Hearth-Previous"], "today")
             self.assertEqual(response.headers["X-Hearth-Pages"], "2")
@@ -83,7 +85,7 @@ class TerminalTests(unittest.TestCase):
         caught.exception.close()
         with self.request("/v1/device") as response:
             status = json.load(response)
-        self.assertEqual(status, {"request": None, "reply_page": "reply:0"})
+        self.assertEqual(status, {"request": None})
         self.assertEqual(self.agent_calls, [])
 
     def test_projection_cache_survives_restart_during_calendar_outage(self):

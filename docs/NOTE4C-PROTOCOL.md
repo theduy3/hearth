@@ -8,7 +8,7 @@ All `/v1/*` requests require the dedicated `Authorization: Bearer …` device cr
 
 `GET /v1/frame?page=today` returns `application/vnd.catthew.bwry2`, exactly30,000 bytes: 400×300, row-major100 bytes/row, leftmost pixel in bits7–6. Indices are black00, white01, yellow10, red11. Thus black/white/red/yellow pack as `0x1e`; solid black/white/yellow/red are `00/55/aa/ff`.
 
-Headers: quoted `ETag` is SHA256 of the body; `X-Hearth-Page` is the resolved opaque page ID; `X-Hearth-Next` and `X-Hearth-Previous` are neighboring IDs; `X-Hearth-Pages` is always2: `today` is the daily task screen, `reply:0` is the chat screen. Both next and previous point to the other screen. Each screen is a bounded preview; long lists/replies never create additional pages. IDs are bounded32-character ASCII values. Send `If-None-Match` only for the matching cached page; unchanged frames return304 with no body. A removed page resolves to Today. `reply:0` always selects the single chat screen.
+Headers: quoted `ETag` is SHA256 of the body; `X-Hearth-Page` is the resolved opaque page ID; `X-Hearth-Next` and `X-Hearth-Previous` are neighboring IDs; `X-Hearth-Pages` is always2: `today` is the daily task screen, `groceries` is the Grocery Shopping screen. Both next and previous point to the other screen. Each screen is a bounded preview; long lists never create additional pages. IDs are bounded32-character ASCII values. Send `If-None-Match` only for the matching cached page; unchanged frames return304 with no body. A removed page resolves to Today. Replies use audio only and never change the selected page.
 
 The front short press advances pages; side up/down navigate previous/next. Buttons never approve actions. A recognized hold records until release or30seconds; an empty/short recording is not converted into a page turn. Give immediate indicator feedback; steady illumination means capture is ready.
 
@@ -18,13 +18,13 @@ Preserve the last frame during outages. Its reserved footer rectangle x304..383/
 
 ## Voice and delivery
 
-`GET /v1/device` is compact JSON: `request` is null or contains `id`, `client_id`, `status`, `speech_status`, `error`, `created`; `reply_page` is `reply:0`. Large source lists and reply text are rendered on the VPS, not parsed by firmware.
+`GET /v1/device` is compact JSON: `request` is null or contains `id`, `client_id`, `status`, `speech_status`, `error`, `created`. No reply-page instruction is sent. Large source lists and reply text are rendered on the VPS, not parsed by firmware.
 
 `POST /v1/utterance` accepts mono signed16bit little-endian16kHz WAV up to30seconds. Set `Content-Type: audio/wav` and a stable `X-Hearth-Request-Id`. Preserve that upload ID and identical bytes across transport retries; conflicting reuse is409, capacity is429. Acceptance is202 with `request_id`. This is not a successful household action.
 
 `GET /v1/requests/<32hexid>` exposes durable status. States: queued, transcribing, processing, completed, failed, uncertain. Never automatically resubmit uncertain agent work. The device can reconcile a lost acceptance response using the compact request's `client_id`.
 
-When completed with speech ready, show `reply:0` and independently fetch `/v1/requests/<id>/audio`. It returns a canonical44-byte PCM WAV header followed by mono16kHz signed16bit little-endian PCM, at most4MiB total. Validate header, length, rate, alignment and exact completion; preserve split samples across network reads. One audio task exclusively owns the codec. A hold cancels playback before capture; a separate bounded audio network reader must not delay capture readiness.
+When completed with speech ready, keep the current page and independently fetch `/v1/requests/<id>/audio`. It returns a canonical44-byte PCM WAV header followed by mono16kHz signed16bit little-endian PCM, at most4MiB total. Validate header, length, rate, alignment and exact completion; preserve split samples across network reads. One audio task exclusively owns the codec. A hold cancels playback before capture; a separate bounded audio network reader must not delay capture readiness.
 
 POST exactly `{}` to `/v1/requests/<id>/audio-ack` only after the entire reply has played and output DMA has drained. Persist the last played request ID to avoid replay after reboot. Interrupted or failed playback is not acknowledged. Ready audio is temporary: ACK,24hour expiry or the32MiB aggregate audio budget removes it; request outcomes remain independently journaled.
 

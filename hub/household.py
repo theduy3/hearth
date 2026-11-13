@@ -20,6 +20,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import yaml
+from markdown_it import MarkdownIt
 
 PACIFIC = ZoneInfo("America/Vancouver")
 
@@ -98,6 +99,67 @@ def _encode(meta, body):
     return ("---\n" + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True) + "---\n" + body).encode("utf-8")
 
 
+def event_elapsed(item, now):
+    """Only an explicit, non-recurring event with a known exclusive end expires."""
+    if item.get("kind") != "event" or item.get("recurring"):
+        return False
+    try:
+        end = item.get("event_end")
+        if end and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end):
+            if item.get("all_day") is not True:
+                return False
+            until = datetime.combine(date.fromisoformat(end), datetime.min.time(), PACIFIC)
+        elif end:
+            until = datetime.fromisoformat(end)
+            if until.tzinfo is None:
+                return False
+        elif item.get("all_day") is True:
+            until = datetime.combine(date.fromisoformat(item["due"]) + timedelta(days=1), datetime.min.time(), PACIFIC)
+        else:
+            return False
+        return until <= now
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _grocery_text(value):
+    value = _text(value, 120)
+    if any(ord(char) < 32 for char in value) or "<!--" in value or "-->" in value:
+        raise ValueError("grocery item must be one plain text line")
+    return value
+
+
+def _grocery_item_lines(body):
+    return {token.map[0] for token in MarkdownIt("commonmark").parse(body)
+            if token.type == "list_item_open" and token.map is not None}
+
+
+def _grocery_writable(body):
+    # Ask the actual Markdown parser whether a new final checkbox would be
+    # visible. Open HTML comments/fences must never hide a successful write.
+    probe = body.rstrip("\n") + "\n\n- [ ] Catthew boundary probe\n"
+    if len(probe.splitlines()) - 1 not in _grocery_item_lines(probe):
+        raise ScopeError("grocery list has an unresolved Markdown boundary")
+
+
+def _grocery_rows(body):
+    rows, seen = [], set()
+    visible = _grocery_item_lines(body)
+    for match in re.finditer(r"(?m)^([-*]) \[([ xX])\] (.+)$", body):
+        if body.count("\n", 0, match.start()) not in visible:
+            continue
+        text = match[3].strip()
+        marker = re.search(r"\s*<!-- catthew-grocery:([a-f0-9]{32}) -->$", text)
+        identity = marker[1] if marker else _digest(f"{match.start()}:{text}".encode())[:32]
+        if marker:
+            text = text[:marker.start()].strip()
+        if not text or len(text) > 300 or identity in seen or len(rows) >= 100:
+            raise ScopeError("grocery list needs review: invalid, duplicate or excessive items")
+        seen.add(identity)
+        rows.append((match, {"id": identity, "item": text, "state": "needed" if match[2] == " " else "purchased"}))
+    return rows
+
+
 class Household:
     def __init__(self, vault: Path, calendar, state: Path):
         self.vault = Path(vault).resolve()
@@ -138,7 +200,10 @@ class Household:
         title = str(meta.get("title") or next((l.lstrip("# ") for l in body.splitlines() if l.startswith("# ")), path.stem))
         return {"id": str(task_id), "title": title[:300], "status": str(meta.get("status") or "open"),
                 "due": str(meta.get("due_date") or ""), "revision": _digest(raw),
-                "calendar_event_id": str(meta.get("google_event_id") or "")}
+                "calendar_event_id": str(meta.get("google_event_id") or ""),
+                "kind": str(meta.get("kind") or meta.get("type") or "task"),
+                "all_day": meta.get("allDay") is True, "event_end": str(meta.get("event_end") or ""),
+                "recurring": bool(meta.get("recurrence") or meta.get("rrule") or meta.get("recurring"))}
 
     def _task_records(self):
         if not (self.vault / "Tasks/tasks").is_dir():
@@ -150,7 +215,7 @@ class Household:
 
     def tasks(self):
         return [self._task(p, m, b, raw) for p, m, b, raw in self._task_records()
-                if _has_tag(m, b, "catthew")]
+                if _has_tag(m, b, "catthew") and m.get("type") != "grocery-list"]
 
     def reference_notes(self):
         notes = []
@@ -183,6 +248,8 @@ class Household:
         if expected is not None and (not path.exists() or _digest(path.read_bytes()) != expected):
             raise ScopeError("task changed; read it again before editing")
         raw = _encode(meta, body)
+        if len(raw) > 256 * 1024:
+            raise ScopeError("note exceeds the readable household size limit")
         descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".hearth-", suffix=".tmp")
         preserve_temporary = False
         try:
@@ -276,18 +343,98 @@ class Household:
         _text(revision, 64)
         with self._locked():
             for path, meta, body, raw in self._task_records():
-                if not _has_tag(meta, body, "catthew"):
+                if meta.get("type") == "grocery-list" or not _has_tag(meta, body, "catthew"):
                     continue
                 task = self._task(path, meta, body, raw)
                 if task["id"] != task_id:
                     continue
                 if task["revision"] != revision:
                     raise ScopeError("task changed; read it again before completion")
-                meta["status"] = "completed"
-                meta["updated"] = datetime.now(PACIFIC).date()
-                # Preserve subtask state; update only a checkbox matching this task title.
-                body = re.sub(r"(?m)^([-*]) \[ \] " + re.escape(task["title"]) + r"$",
-                              lambda match: f"{match[1]} [x] {task['title']}", body, count=1)
-                updated = self._write(path, meta, body, expected=revision)
-                return {**self._task(path, meta, body, updated), "ok": True}
+                return self._complete_record(path, meta, body, raw, datetime.now(PACIFIC))
         raise ScopeError("no matching task in Catthew's household scope")
+
+    def _complete_record(self, path, meta, body, raw, now):
+        task = self._task(path, meta, body, raw)
+        meta["status"] = "completed"
+        meta["updated"] = meta["completed_date"] = now.date()
+        body = re.sub(r"(?m)^([-*]) \[ \] " + re.escape(task["title"]) + r"$",
+                      lambda match: f"{match[1]} [x] {task['title']}", body, count=1)
+        updated = self._write(path, meta, body, expected=_digest(raw))
+        return {**self._task(path, meta, body, updated), "ok": True}
+
+    def complete_past_events(self, *, now=None):
+        now = now or datetime.now(PACIFIC)
+        completed = []
+        with self._locked():
+            for path, meta, body, raw in self._task_records():
+                if not _has_tag(meta, body, "catthew") or meta.get("status") in ("completed", "done", "cancelled"):
+                    continue
+                if event_elapsed(self._task(path, meta, body, raw), now):
+                    completed.append(self._complete_record(path, meta, body, raw, now))
+        return completed
+
+    def _grocery_record(self):
+        path = self.vault / "Tasks/tasks/grocery-shopping.md"
+        if path.is_symlink() or path.parent.resolve() != path.parent:
+            raise ScopeError("grocery list must be a scoped regular file")
+        if not path.exists():
+            return path, {"id": "catthew-grocery-shopping", "title": "Grocery Shopping", "type": "grocery-list",
+                          "status": "open", "tags": ["catthew", "grocery", "household"]}, "# Grocery Shopping\n\n", None
+        if path.stat().st_size > 256 * 1024:
+            raise ScopeError("grocery list exceeds its size limit")
+        raw = path.read_bytes()
+        meta, body = _parse(raw)
+        if meta.get("type") != "grocery-list" or not all(_has_tag(meta, "", tag) for tag in ("catthew", "grocery")):
+            raise ScopeError("grocery filename belongs to another workflow")
+        if meta.get("status") not in ("open", "pending", "in_progress"):
+            raise ScopeError("grocery list is closed; do not restore old items implicitly")
+        return path, meta, body, raw
+
+    def groceries(self):
+        _, _, body, raw = self._grocery_record()
+        return {"revision": _digest(raw) if raw is not None else "", "items": [item for _, item in _grocery_rows(body)]}
+
+    def add_grocery(self, operation_id, item):
+        identity = _digest(("grocery:" + _text(operation_id, 128)).encode())[:32]
+        item = _grocery_text(item)
+        with self._locked():
+            path, meta, body, raw = self._grocery_record()
+            _grocery_writable(body)
+            rows = _grocery_rows(body)
+            for _, existing in rows:
+                if existing["id"] == identity:
+                    if existing["item"] != item:
+                        raise ScopeError("grocery operation belongs to a changed item")
+                    return {"ok": True, "item": existing, "revision": _digest(raw)}
+            if len(rows) >= 100:
+                raise ScopeError("grocery list is full; review purchased items first")
+            body = body.rstrip("\n") + f"\n\n- [ ] {item} <!-- catthew-grocery:{identity} -->\n"
+            saved = self._write(path, meta, body, expected=_digest(raw) if raw is not None else None)
+            return {"ok": True, "item": {"id": identity, "item": item, "state": "needed"}, "revision": _digest(saved)}
+
+    def update_grocery(self, item_id, revision, *, item=None, state=None):
+        if not re.fullmatch(r"[a-f0-9]{32}", _text(item_id, 32)):
+            raise ValueError("invalid grocery item ID")
+        _text(revision, 64)
+        if item is None and state is None:
+            raise ValueError("grocery update is empty")
+        if item is not None:
+            item = _grocery_text(item)
+        if state is not None and state not in ("needed", "purchased"):
+            raise ValueError("invalid grocery item state")
+        with self._locked():
+            path, meta, body, raw = self._grocery_record()
+            if raw is None or _digest(raw) != revision:
+                raise ScopeError("grocery list changed; read its current revision")
+            _grocery_writable(body)
+            for match, existing in _grocery_rows(body):
+                if existing["id"] != item_id:
+                    continue
+                updated = {**existing, "item": item if item is not None else existing["item"],
+                           "state": state if state is not None else existing["state"]}
+                checked = "x" if updated["state"] == "purchased" else " "
+                line = f"{match[1]} [{checked}] {updated['item']} <!-- catthew-grocery:{item_id} -->"
+                changed = body[:match.start()] + line + body[match.end():]
+                saved = self._write(path, meta, changed, expected=revision)
+                return {"ok": True, "item": updated, "revision": _digest(saved)}
+        raise ScopeError("no matching grocery item; read the list again")

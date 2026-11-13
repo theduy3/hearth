@@ -12,7 +12,7 @@ This fork targets the **ESP32-S3 N16R8 Note4C with a real 400 × 300 black/white
 - **Short-press Up:** return to the previous page.
 - **Hold Down:** stop audio/display work safely and enter deep sleep. The front button wakes the device.
 
-There are exactly two screens: **Daily tasks** and **Catthew chat**. Daily tasks shows up to five overdue, due-today or undated tasks, with an overflow count. Chat shows the latest reply as a single-screen preview; long replies do not add pages. Ask Catthew for the rest of a task list or details from the calendar/notes. Either navigation direction toggles between the two screens. Hidden calendar/notes changes do not repaint these screens.
+There are exactly two screens: **Tasks** and **Grocery Shopping**. Tasks shows up to five overdue, due-today or undated tasks, with an overflow count. Explicit one-time events complete after their known end; ordinary overdue tasks remain open. Grocery Shopping shows up to seven needed items from the shared checklist; purchased items disappear. Ask Catthew by voice to add groceries, change quantities or check off purchases. Replies play through the speaker and leave the selected screen in place. Either navigation direction toggles between the two screens. Longer lists do not add pages, and hidden calendar/notes or reply-text changes do not repaint them.
 
 The panel uses full refreshes; the user observed about15seconds for a page change, with flashing stopping once it settles. Navigation presses during a refresh are combined; recording and reply playback run independently. Recording and processing use the indicator rather than additional screen refreshes. An offline badge distinguishes a cached page from current data.
 

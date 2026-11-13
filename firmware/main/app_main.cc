@@ -40,7 +40,7 @@ uint32_t g_pending_nav=0,g_nav=0;
 Upload* g_upload=nullptr;
 HearthFrameInfo g_displayed{},g_navigation{};
 int g_steps=0;
-char g_desired[33]="today",g_client[129]{},g_played[33]{},g_dismissed[33]{},g_scheduled[33]{},g_answer_shown[33]{},g_ack[33]{};
+char g_desired[33]="today",g_client[129]{},g_played[33]{},g_dismissed[33]{},g_scheduled[33]{},g_ack[33]{};
 bool g_have_frame=false,g_suppress_audio=false;
 char g_audio_target[33]{};
 unsigned g_audio_attempts=0;
@@ -297,7 +297,6 @@ void NetworkTask(void*) {
                     bool speech_failed=!std::strcmp(status.speech,"failed");
                     if(failed || completed) {
                         g_processing=false;
-                        if(std::strcmp(g_answer_shown,status.id)) {Copy(g_desired,sizeof(g_desired),"reply:0");g_steps=0;++g_nav;Copy(g_answer_shown,sizeof(g_answer_shown),status.id);}
                         if(failed || speech_failed) Error();
                     }
                     if(std::strcmp(g_audio_target,status.id)) {Copy(g_audio_target,sizeof(g_audio_target),status.id);g_audio_attempts=0;g_audio_retry_after=0;}

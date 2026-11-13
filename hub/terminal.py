@@ -48,7 +48,7 @@ class TerminalState:
         self.submission_lock = threading.Lock()
         self.notification_lock = threading.Lock()
         self.submissions = deque()
-        self.cache = {"events": [], "tasks": [], "notes": []}
+        self.cache = {"events": [], "tasks": [], "notes": [], "groceries": []}
         self.errors = {"calendar": True, "vault": True}
         self.generated_at = ""
         self.cache_path = journal.path.with_name("household-view.json")
@@ -75,7 +75,7 @@ class TerminalState:
                 return
             saved = json.loads(self.cache_path.read_text())
             cache = saved["cache"]
-            if set(cache) == {"events", "tasks", "notes"} and all(isinstance(x, list) for x in cache.values()):
+            if set(cache) == {"events", "tasks", "notes", "groceries"} and all(isinstance(x, list) for x in cache.values()):
                 self.cache = cache
                 self.generated_at = str(saved["generated_at"])
         except (OSError, ValueError, KeyError, TypeError):
@@ -113,10 +113,12 @@ class TerminalState:
             with self.lock:
                 self.errors["calendar"] = True
         try:
+            self.household.complete_past_events(now=datetime.now(PACIFIC))
             tasks = [x for x in self.household.tasks() if x["status"] not in ("completed", "done", "cancelled")]
             notes = self.household.reference_notes()
+            groceries = self.household.groceries()["items"]
             with self.lock:
-                self.cache["tasks"], self.cache["notes"] = tasks, notes
+                self.cache["tasks"], self.cache["notes"], self.cache["groceries"] = tasks, notes, groceries
                 self.errors["vault"] = False
         except Exception:
             with self.lock:
@@ -140,12 +142,12 @@ class TerminalState:
     def device_status(self):
         record = self.journal.latest(self.device)
         request = {k: record[k] for k in ("id", "client_id", "status", "speech_status", "error", "created")} if record else None
-        return {"request": request, "reply_page": "reply:0"}
+        return {"request": request}
 
     def poster(self, offsets=None):
         offsets = offsets or {}
         payload = self.view()
-        for name in ("events", "tasks", "notes"):
+        for name in ("events", "tasks", "notes", "groceries"):
             items, offset = payload[name], offsets.get(name, 0)
             payload[name] = items[offset:offset + 8]
             payload[name + "_total"] = len(items)
@@ -185,7 +187,8 @@ class TerminalState:
                     raise ValueError("no speech")
                 self.journal.begin_agent(job["id"], text)
                 agent_started = True
-                prompt = ("Family Note4C terminal: give a concise English reply suitable for display and speech. "
+                prompt = ("Family Note4C terminal: give a concise English reply for speech only. "
+                          "For groceries use the shared household_grocery tools, not tasks or calendar. Confirm changes only from successful tool results. "
                           f"Household timezone America/Vancouver; local time {datetime.now(PACIFIC).isoformat(timespec='seconds')}. "
                           f"Request reference {job['id']}. Use this reference in operation IDs; calendar changes need private approval.\n\n" + text)
                 reply = self.gateway.turn(prompt, self.journal.session(self.device), self.device,
