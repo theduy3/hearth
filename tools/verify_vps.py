@@ -32,6 +32,7 @@ connection=http.client.HTTPSConnection('zectrix.theduy.cloud',timeout=15)
 connection.request('GET','/v1/frame?page=today',headers={'Authorization':'Bearer '+setting(raw,'HEARTH_DEVICE_TOKEN')})
 response=connection.getresponse();pixels=response.read(30001)
 checks['authenticated_color_frame']=response.status==200 and len(pixels)==30000 and response.getheader('ETag')=='"'+hashlib.sha256(pixels).hexdigest()+'"'
+checks['frame_navigation_headers']=all(response.getheader(name) for name in ('X-Hearth-Page','X-Hearth-Next','X-Hearth-Previous'))
 connection.close()
 owned=[]
 for path in Path('/proc').iterdir():
@@ -53,7 +54,7 @@ def main():
     with urlopen("https://zectrix.theduy.cloud/health", timeout=15) as response:
         checks["verified_https_health"] = response.status == 200 and json.load(response).get("ok") is True
     try:
-        with urlopen("https://zectrix.theduy.cloud/v1/poster", timeout=10):
+        with urlopen("https://zectrix.theduy.cloud/v1/frame?page=today", timeout=10):
             checks["unauthorized_rejected"] = False
     except HTTPError as error:
         checks["unauthorized_rejected"] = error.code == 401

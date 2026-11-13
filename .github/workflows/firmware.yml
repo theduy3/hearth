@@ -9,6 +9,19 @@ concurrency:
   group: note4c-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  host-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Run household, transport, projection and provisioning regressions
+        run: |
+          python3 -m venv /tmp/hearth-host-tests
+          /tmp/hearth-host-tests/bin/pip install -r requirements.txt
+          /tmp/hearth-host-tests/bin/python -m unittest discover -s tests -v
+          bash -n tools/setup-note4c.sh
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -23,8 +36,7 @@ jobs:
           persist-credentials: false
       - name: Check native display and PCM protocol
         run: |
-          python3 -m unittest discover -s tests -p test_note4c_epd.py -v
-          python3 -m unittest discover -s tests -p test_note4c_protocol.py -v
+          python3 -m unittest discover -s tests -p "test_note4c_*.py" -v
       - name: Build with pinned ESP-IDF v6.1
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -45,3 +57,4 @@ jobs:
             firmware/build/partition_table/partition-table.bin
             firmware/build/flasher_args.json
             firmware/build/note4c-manifest.json
+            firmware/dependencies.lock

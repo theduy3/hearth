@@ -1,0 +1,9 @@
+# Reference only. tools.configure_catthew generates the private terminal.env.
+# Install the real environment file with mode0600 outside this checkout.
+# systemd EnvironmentFile supplies it; importing hub does not read .env files.
+HEARTH_HERMES_URL=http://127.0.0.1:8642
+HEARTH_HERMES_KEY=
+HEARTH_DEVICE_TOKEN=
+
+# Wi-Fi belongs in device NVS through tools/setup-note4c.sh.
+# Never add Wi-Fi, OAuth, model API or Telegram secrets to firmware builds.

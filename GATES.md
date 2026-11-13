@@ -14,8 +14,8 @@ Scope: Implement the approved color voice terminal, preserving Catthew identity 
   EXPECT: VOICE_PATH_VERIFIED
   EVIDENCE: automatic-evidence=v1; definition-sha256=b5a29841315a55cc21418f0b801e2c00f6edfad52f35deb0d883df731b4a5b7f; exit=0; EXPECT=matched; output-sha256=5ac9c47e5afcb96d2e4e6d77eec105573826b624fadd95fa70834907e4bea43c; output-bytes=198; shell=/bin/sh; cwd=/Users/theduy/Repo/hearth-catthew-note4c; path=20e18ba3d3ca/32 entries
 
-- [ ] G3: Color firmware compiles and host checks verify native2bpp display commands, navigation, capture and cancellable reply playback
-  EVIDENCE: pending; use pinned ESP-IDFv6.1 public GitHub Actions builder
+- [x] G3: Digest-pinned ESP-IDF6.1 builds the native BWRY firmware; actual driver, PCM protocol and button timing have host regression coverage
+  EVIDENCE: run43360727456 succeeded at d3acefaaa294c93e97128c94b0afe5939f6ea1db; actual written artifact SHA manifest verified; independent lifecycle review fixes included; cleanup-source CI is being refreshed.
 
 - [x] G4: Supervised VPS services use selected ChatGPT sol6.1, unchanged SOUL, restricted tools and authenticated TLS color frames
   CHECK: python3 tools/verify_vps.py --soul-sha256 4ef56b0716db7006c89862fa9019c430d6b7b7a93b0b058c682f46615e2702f0
@@ -28,7 +28,7 @@ Scope: Implement the approved color voice terminal, preserving Catthew identity 
   EVIDENCE: automatic-evidence=v1; definition-sha256=e179404318a665ae4ceab0adb965052028de1d4c0de1feb6d25c9d4457c5dfe2; exit=0; EXPECT=matched; output-sha256=64a118b2abbb2aca60dc3377f8c505ed448cc92a9cd4a98c388f2509f07d182c; output-bytes=24; shell=/bin/sh; cwd=/Users/theduy/Repo/hearth-catthew-note4c; path=20e18ba3d3ca/32 entries
 
 - [ ] G5: Physical Note4C accepts verified firmware and passes color, microphone, speaker, gesture and reconnect checks
-  EVIDENCE: pending; no firmware WRITE has occurred
+  EVIDENCE: firmware d3acefa bootloader/partition/application flashed and hardware-verified; USB expected identity/configured=false; private flash log retained. Human color/audio/gesture/reconnect acceptance pending via tools/setup-note4c.sh.
 
 - [ ] G6: Individually confirmed live task/event tests, private approvals, source sharing with Telegram/CLI and Mac-off operation pass
   EVIDENCE: pending; no real household records have been changed by verification
