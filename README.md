@@ -71,7 +71,7 @@ Writing additionally requires `--write`, a private verified full factory backup,
 
 ## Voice and latency
 
-The local Piper voice is Joe (`en_US-joe-medium`, male US-English, CC0 dataset). Whisper remains base.en int8. Active requests and completed text awaiting audio poll every500ms; idle/terminal requests poll every5seconds. A regression trace covers the completion boundary that previously caused a five-second wait for ready audio.
+The local Piper voice is Joe (`en_US-joe-medium`, male US-English, CC0 dataset). Whisper remains base.en int8. The requested731MB Parakeet Unified Q8 candidate was prepared and tested but is inactive: it measured slower and used more resident memory on this VPS. See [measurements and pending tradeoff](docs/PARAKEET-BENCHMARK.md). Active requests and completed text awaiting audio poll every500ms; idle/terminal requests poll every5seconds. A regression trace covers the completion boundary that previously caused a five-second wait for ready audio.
 
 `tools.voice_smoke` reports upload, audio-ready/download timings and status transitions without transcript or reply text. Current measured VPS audio readiness is about4.3–4.4seconds; this is not an end-to-end device latency measurement.
 

@@ -32,6 +32,14 @@ Firmware9fd1f98 fixes a concrete polling boundary: completed text with pending T
 
 The user has now explicitly selected openai-codex/gpt-6.1-terra, superseding the earlier Sol checkpoint. Live profile already selects Terra; no profile rewrite or gateway restart is needed. Setup, regression expectations, release checks and current design now use Terra. The previous expected-model failure is resolved by this confirmed requirement change: all108 tests pass, fresh verify_vps reports every check true and VPS_VERIFIED, and G4 is met again. Timings above reflect the Terra profile.
 
+## Parakeet Q8 evaluation: prepared, not activated
+
+User authorized the731MB Parakeet Unified English Q8 GGUF candidate. Exact pinned model and license/provenance files are verified under `/opt/catthew-speech/parakeet-q8`; hash-pinned transcribe-cpp0.4.2 CPU wheels are installed and load on glibc2.34. A bounded isolated test, with original speech/terminal paused only after an idle-queue check, completed actual transcription and automatically restored Whisper/Joe.
+
+Matched synthetic greeting: Whisper warm median0.441s, Q8 warm median1.608s. Single longer/narrative Q8 samples were also slower. Recognition-only Q8 high-water RSS1004.8MiB includes mapped weights; full Q8/Piper fit within the existing768MiB service budget has not been proven. Full production backend migration/activation is held for user direction on this speed/memory tradeoff. No silent Q5/Q6 substitution or infrastructure upgrade.
+
+All111 host tests and fresh live VPS checks pass after restoration, including actual original STT/TTS, Terra, unchanged SOUL and scoped integrations. Full methodology, limits and reproduction locations: `docs/PARAKEET-BENCHMARK.md`; task gates: `docs/PARAKEET-GATES.md` (P1/P2 met; P3/P4 explicitly held). Existing physical acceptance and household pilot remain pending.
+
 ## Architecture and reviewed behavior
 
 The VPS owns household data, English STT/TTS, agent calls and Unicode BWRY rendering. Device owns authenticated TLS, runtime NVS settings, buttons, exclusive codec ownership and immutable frame projection. It has separate display, audio, audio-download and network tasks; no recording/processing/clock-second panel refresh.
