@@ -12,6 +12,7 @@ struct HearthDeviceStatus {
     bool present=false;
     char id[33]{},client[129]{},status[17]{},speech[17]{};
 };
+void HearthNetStop();
 esp_err_t HearthFetchFrame(const HearthConfig&, const char* page, const char* etag,
                           uint8_t* pixels, HearthFrameInfo*, bool* unchanged);
 esp_err_t HearthFetchDevice(const HearthConfig&, HearthDeviceStatus*);

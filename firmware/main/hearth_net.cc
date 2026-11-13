@@ -1,5 +1,6 @@
 #include "hearth_net.h"
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <strings.h>
@@ -7,8 +8,10 @@
 #include "cJSON.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
+#include "esp_timer.h"
 
 namespace {
+std::atomic<bool> g_stopped{false};
 struct ResponseHeaders {
     HearthFrameInfo frame{};
     char type[80]{};
@@ -33,11 +36,13 @@ class Http {
 public:
     ResponseHeaders headers{};
     esp_http_client_handle_t client=nullptr;
-    Http(const HearthConfig& config,const std::string& path) {
+    int64_t deadline;
+    Http(const HearthConfig& config,const std::string& path,uint32_t maximum_ms=20000)
+        : deadline(esp_timer_get_time()+static_cast<int64_t>(maximum_ms)*1000) {
         if (!HearthConfigComplete(config)) return;
         std::string url=std::string(config.hub)+path;
         esp_http_client_config_t options{};
-        options.url=url.c_str(); options.timeout_ms=10000;
+        options.url=url.c_str(); options.timeout_ms=5000;
         options.crt_bundle_attach=esp_crt_bundle_attach;
         options.disable_auto_redirect=true; options.event_handler=Event;
         options.user_data=&headers; options.buffer_size=2048;
@@ -50,9 +55,11 @@ public:
             }
         }
     }
+    bool Alive() const { return !g_stopped.load() && esp_timer_get_time()<deadline; }
     ~Http() { if (client) { esp_http_client_close(client);esp_http_client_cleanup(client); } }
     esp_err_t Open(const uint8_t* data=nullptr,size_t size=0,const char* type=nullptr,const char* upload=nullptr,const char* etag=nullptr) {
         if (!client) return ESP_ERR_NO_MEM;
+        if (!Alive()) return ESP_ERR_TIMEOUT;
         if (data) esp_http_client_set_method(client,HTTP_METHOD_POST);
         if (type) esp_http_client_set_header(client,"Content-Type",type);
         if (upload) esp_http_client_set_header(client,"X-Hearth-Request-Id",upload);
@@ -61,23 +68,26 @@ public:
         if (result!=ESP_OK) return result;
         size_t sent=0;
         while (sent<size) {
+            if(!Alive()) return ESP_ERR_TIMEOUT;
             int n=esp_http_client_write(client,reinterpret_cast<const char*>(data+sent),std::min<size_t>(4096,size-sent));
             if (n<=0) return ESP_FAIL;
             sent+=static_cast<size_t>(n);
         }
+        if (!Alive()) return ESP_ERR_TIMEOUT;
         if (esp_http_client_fetch_headers(client)<0 || headers.invalid) return ESP_ERR_INVALID_RESPONSE;
-        return ESP_OK;
+        return Alive()?ESP_OK:ESP_ERR_TIMEOUT;
     }
     int Status() const { return esp_http_client_get_status_code(client); }
     int64_t Length() const { return esp_http_client_get_content_length(client); }
     bool Read(uint8_t* data,size_t size) {
         size_t have=0;
         while (have<size) {
+            if(!Alive()) return false;
             int n=esp_http_client_read(client,reinterpret_cast<char*>(data+have),std::min<size_t>(2048,size-have));
             if (n<=0) return false;
             have+=static_cast<size_t>(n);
         }
-        return esp_http_client_is_complete_data_received(client);
+        return Alive() && esp_http_client_is_complete_data_received(client);
     }
     cJSON* Json() {
         int64_t size=Length();
@@ -95,6 +105,8 @@ bool String(cJSON* object,const char* key,char* target,size_t capacity) {
     return true;
 }
 }
+
+void HearthNetStop() { g_stopped.store(true); }
 
 bool HearthFrameInfoValid(const HearthFrameInfo& info) {
     if (!HearthPageValid(info.page) || !HearthPageValid(info.next) || !HearthPageValid(info.previous) || strnlen(info.etag,sizeof(info.etag))!=66 || info.etag[0]!='"' || info.etag[65]!='"') return false;
@@ -165,14 +177,14 @@ esp_err_t HearthAck(const HearthConfig& config,const char* id) {
 esp_err_t HearthFetchAudio(const HearthConfig& config,const char* id,HearthPcmConsumer consume,void* context,bool (*cancelled)(void*)) {
     if (!HearthRequestIdValid(id) || !consume || !cancelled) return ESP_ERR_INVALID_ARG;
     if (cancelled(context)) return ESP_ERR_INVALID_STATE;
-    Http http(config,RequestPath(id,"/audio"));
+    Http http(config,RequestPath(id,"/audio"),150000);
     esp_err_t result=http.Open();
     if (result!=ESP_OK) return result;
     if (http.Status()!=200 || http.Length()<=44 || http.Length()>static_cast<int64_t>(kHearthMaxAudioBytes) || std::strcmp(http.headers.type,"audio/wav")) return ESP_ERR_INVALID_RESPONSE;
     HearthPcmDecoder decoder(static_cast<size_t>(http.Length()),consume,context);
     uint8_t buffer[1024]{};
     for (;;) {
-        if (cancelled(context)) return ESP_ERR_INVALID_STATE;
+        if (!http.Alive() || cancelled(context)) return ESP_ERR_INVALID_STATE;
         int n=esp_http_client_read(http.client,reinterpret_cast<char*>(buffer),sizeof(buffer));
         if (n<0) return ESP_FAIL;
         if (n==0) break;

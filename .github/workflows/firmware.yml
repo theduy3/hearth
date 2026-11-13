@@ -27,6 +27,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_note4c_protocol.py -v
       - name: Build with pinned ESP-IDF v6.1
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source /opt/esp/idf/export.sh
           idf.py -C firmware set-target esp32s3
           idf.py -C firmware -j 2 build

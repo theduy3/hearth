@@ -7,6 +7,7 @@
 #include "esp_heap_caps.h"
 #include "esp_random.h"
 #include "esp_sleep.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -28,8 +29,8 @@ namespace {
 constexpr uint32_t kCacheMagic=0x43504631;
 struct Frame { uint32_t magic=kCacheMagic;HearthFrameInfo info{};uint8_t pixels[kHearthFrameBytes]{}; };
 struct Upload { HearthClip clip{};char client[33]{};uint32_t generation=0;int64_t created=0; };
-struct AudioCommand { char id[33]{};uint32_t generation=0; };
-struct AudioPacket { uint32_t generation=0;uint16_t count=0;bool end=false,good=false;char id[33]{};int16_t samples[512]{}; };
+struct AudioCommand { char id[33]{};uint32_t generation=0,attempt=0; };
+struct AudioPacket { uint32_t generation=0,attempt=0;uint16_t count=0;bool end=false,good=false;char id[33]{};int16_t samples[512]{}; };
 
 ZectrixBoard g_board;
 HearthConfig g_config{};
@@ -41,6 +42,11 @@ HearthFrameInfo g_displayed{},g_navigation{};
 int g_steps=0;
 char g_desired[33]="today",g_client[129]{},g_played[33]{},g_dismissed[33]{},g_scheduled[33]{},g_answer_shown[33]{},g_ack[33]{};
 bool g_have_frame=false,g_suppress_audio=false;
+char g_audio_target[33]{};
+unsigned g_audio_attempts=0;
+uint32_t g_audio_sequence=0;
+int64_t g_audio_retry_after=0;
+std::atomic<bool> g_audio_stopped{false},g_display_stopped{false},g_sleep_requested{false};
 std::atomic<uint32_t> g_audio_generation{0};
 std::atomic<bool> g_record{false},g_capture_ready{false},g_audio_busy{false},g_display_busy{false},g_online{false},g_clock_ready{false},g_processing{false},g_shutdown{false},g_cache_safe{false};
 std::atomic<int64_t> g_error_until{0};
@@ -88,10 +94,11 @@ void DisplayTask(void*) {
         g_display_busy=true;
         if (zectrix_epd_refresh_full_2bpp(epd,setup_frame,kHearthFrameBytes)!=ESP_OK) Error();
         g_display_busy=false;g_cache_safe=true;
-        for(;;) vTaskDelay(pdMS_TO_TICKS(1000));
+        while(!g_shutdown.load()) vTaskDelay(pdMS_TO_TICKS(100));
+        g_display_stopped=true;vTaskDelete(nullptr);return;
     }
     auto* paint=static_cast<uint8_t*>(heap_caps_malloc(kHearthFrameBytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
-    if (!paint) { Error();vTaskDelete(nullptr);return; }
+    if (!paint) { Error();esp_restart(); }
     bool painted=false,offline=false,dirty=false;
     int64_t began=esp_timer_get_time();
     for (;;) {
@@ -101,7 +108,7 @@ void DisplayTask(void*) {
         bool now_offline=!g_online.load();
         Frame* target=next?next:current;
         bool different=next && (!current || std::strcmp(next->info.etag,current->info.etag) || std::strcmp(next->info.page,current->info.page));
-        bool should_paint=target && (different || !painted || offline!=now_offline);
+        bool should_paint=!g_shutdown.load() && target && (different || !painted || offline!=now_offline);
         // Give the first authenticated fetch a chance to replace the boot cache.
         if(!next && !painted && esp_timer_get_time()-began<5000000) should_paint=false;
         if (should_paint) {
@@ -132,6 +139,7 @@ void DisplayTask(void*) {
             }
         }
         g_cache_safe.store(!dirty && !g_display_busy.load());
+        if(g_shutdown.load() && !g_audio_busy.load()) {g_display_stopped=true;vTaskDelete(nullptr);return;}
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -142,7 +150,7 @@ bool Cancelled(void* context) {
 }
 bool Consume(const int16_t* data,size_t count,void* context) {
     auto* command=static_cast<AudioCommand*>(context);
-    AudioPacket packet{};packet.generation=command->generation;packet.count=static_cast<uint16_t>(count);Copy(packet.id,sizeof(packet.id),command->id);
+    AudioPacket packet{};packet.generation=command->generation;packet.attempt=command->attempt;packet.count=static_cast<uint16_t>(count);Copy(packet.id,sizeof(packet.id),command->id);
     std::memcpy(packet.samples,data,count*sizeof(int16_t));
     while(!Cancelled(context)) if(xQueueSend(g_pcm,&packet,pdMS_TO_TICKS(20))==pdTRUE) return true;
     return false;
@@ -151,9 +159,9 @@ void AudioReader(void*) {
     AudioCommand command{};
     for (;;) {
         if(xQueueReceive(g_audio_commands,&command,portMAX_DELAY)!=pdTRUE) continue;
-        if(Cancelled(&command) || !g_clock_ready.load()) continue;
-        esp_err_t result=HearthFetchAudio(g_config,command.id,Consume,&command,Cancelled);
-        AudioPacket end{};end.generation=command.generation;end.end=true;end.good=result==ESP_OK;Copy(end.id,sizeof(end.id),command.id);
+        if(Cancelled(&command)) continue;
+        esp_err_t result=g_clock_ready.load()?HearthFetchAudio(g_config,command.id,Consume,&command,Cancelled):ESP_ERR_INVALID_STATE;
+        AudioPacket end{};end.generation=command.generation;end.attempt=command.attempt;end.end=true;end.good=result==ESP_OK;Copy(end.id,sizeof(end.id),command.id);
         while(!Cancelled(&command)) if(xQueueSend(g_pcm,&end,pdMS_TO_TICKS(20))==pdTRUE) break;
     }
 }
@@ -161,17 +169,34 @@ void AudioReader(void*) {
 void AudioTask(void*) {
     HearthSpeaker speaker(&g_board);
     bool playing=false;
-    uint32_t playing_generation=0,rejected_generation=UINT32_MAX;
+    uint32_t playing_generation=0,rejected_attempt=UINT32_MAX;
     char playing_id[33]{};
     std::unique_lock<std::mutex> audio_guard(g_audio_flash,std::defer_lock);
+    auto stop_playback=[&](bool dismiss) {
+        if(!playing) return;
+        speaker.End(false);playing=false;g_audio_busy=false;
+        if(audio_guard.owns_lock()) audio_guard.unlock();
+        if(dismiss) {
+            {std::lock_guard<std::mutex> lock(g_mutex);Copy(g_dismissed,sizeof(g_dismissed),playing_id);}
+            HearthStoreId("dismissed",playing_id);
+        }
+    };
+    auto failed=[&](const AudioPacket& packet) {
+        rejected_attempt=packet.attempt;
+        {std::lock_guard<std::mutex> lock(g_mutex);if(!std::strcmp(g_scheduled,packet.id)) g_scheduled[0]=0;g_audio_retry_after=esp_timer_get_time()+5000000;}
+        Error();
+    };
     for (;;) {
-        if(playing && (playing_generation!=g_audio_generation.load() || g_shutdown.load())) {
-            speaker.End(false);playing=false;g_audio_busy=false;audio_guard.unlock();
-            char dismissed[33]{};
-            {std::lock_guard<std::mutex> lock(g_mutex);Copy(dismissed,sizeof(dismissed),playing_id);Copy(g_dismissed,sizeof(g_dismissed),dismissed);}
-            if(*dismissed) HearthStoreId("dismissed",dismissed);
+        if(playing && (playing_generation!=g_audio_generation.load() || g_shutdown.load())) stop_playback(true);
+        if(g_shutdown.load()) {
+            stop_playback(true);g_record=false;g_capture_ready=false;
+            audio_guard.lock();g_board.ReleaseAudio();audio_guard.unlock();
+            g_audio_busy=false;g_audio_stopped=true;vTaskDelete(nullptr);return;
         }
         if(g_record.exchange(false)) {
+            // A hold can be published after the cancellation check above.
+            // Always release playback ownership here before locking capture.
+            stop_playback(true);
             g_audio_busy=true;g_capture_ready=false;audio_guard.lock();
             g_capture_generation=g_audio_generation.load();
             xQueueReset(g_pcm);
@@ -192,12 +217,12 @@ void AudioTask(void*) {
         }
         AudioPacket packet{};
         if(xQueueReceive(g_pcm,&packet,pdMS_TO_TICKS(20))!=pdTRUE) continue;
-        if(packet.generation!=g_audio_generation.load() || packet.generation==rejected_generation || g_shutdown.load()) continue;
+        if(packet.generation!=g_audio_generation.load() || packet.attempt==rejected_attempt || g_shutdown.load()) continue;
         if(!playing && !packet.end) {
             g_audio_busy=true;audio_guard.lock();
             Copy(playing_id,sizeof(playing_id),packet.id);
             playing=speaker.Begin();playing_generation=packet.generation;
-            if(!playing) {g_audio_busy=false;audio_guard.unlock();rejected_generation=packet.generation;Error();continue;}
+            if(!playing) {g_audio_busy=false;audio_guard.unlock();failed(packet);continue;}
         }
         if(packet.end) {
             bool delivered=playing && packet.good;
@@ -209,9 +234,12 @@ void AudioTask(void*) {
                 if(HearthStoreId("played",id)==ESP_OK) {
                     std::lock_guard<std::mutex> lock(g_mutex);Copy(g_played,sizeof(g_played),id);Copy(g_ack,sizeof(g_ack),id);
                 } else Error();
-            } else Error();
+            } else if(packet.generation!=g_audio_generation.load()) {
+                {std::lock_guard<std::mutex> lock(g_mutex);Copy(g_dismissed,sizeof(g_dismissed),packet.id);}
+                HearthStoreId("dismissed",packet.id);
+            } else failed(packet);
         } else if(playing && !speaker.Write(packet.samples,packet.count)) {
-            speaker.End(false);playing=false;g_audio_busy=false;audio_guard.unlock();rejected_generation=packet.generation;Error();
+            stop_playback(false);failed(packet);
         }
     }
 }
@@ -232,7 +260,7 @@ void NetworkTask(void*) {
         {std::lock_guard<std::mutex> lock(g_mutex);upload=g_upload;g_upload=nullptr;}
         if(upload) {
             char request[33]{};bool accepted=false;
-            for(int attempt=0;attempt<3 && !g_shutdown.load();++attempt) {
+            for(int attempt=0;attempt<3 && !g_shutdown.load() && esp_timer_get_time()-upload->created<120000000;++attempt) {
                 HearthDeviceStatus existing{};
                 if(HearthFetchDevice(g_config,&existing)==ESP_OK && existing.present && !std::strcmp(existing.client,upload->client)) {Copy(request,sizeof(request),existing.id);accepted=true;break;}
                 if(HearthUpload(g_config,upload->clip,upload->client,request)==ESP_OK) {accepted=true;break;}
@@ -263,9 +291,10 @@ void NetworkTask(void*) {
                         if(std::strcmp(g_answer_shown,status.id)) {Copy(g_desired,sizeof(g_desired),"reply:0");g_steps=0;++g_nav;Copy(g_answer_shown,sizeof(g_answer_shown),status.id);}
                         if(failed || speech_failed) Error();
                     }
-                    if(completed && speech_ready && !g_suppress_audio && !g_audio_busy.load() && !g_record.load() && std::strcmp(status.id,g_played) && std::strcmp(status.id,g_dismissed) && std::strcmp(status.id,g_scheduled)) {
-                        AudioCommand command{};Copy(command.id,sizeof(command.id),status.id);command.generation=g_audio_generation.load();
-                        Copy(g_scheduled,sizeof(g_scheduled),status.id);xQueueOverwrite(g_audio_commands,&command);
+                    if(std::strcmp(g_audio_target,status.id)) {Copy(g_audio_target,sizeof(g_audio_target),status.id);g_audio_attempts=0;g_audio_retry_after=0;}
+                    if(completed && speech_ready && !g_suppress_audio && !g_audio_busy.load() && !g_record.load() && g_audio_attempts<3 && now>=g_audio_retry_after && std::strcmp(status.id,g_played) && std::strcmp(status.id,g_dismissed) && std::strcmp(status.id,g_scheduled)) {
+                        AudioCommand command{};Copy(command.id,sizeof(command.id),status.id);command.generation=g_audio_generation.load();command.attempt=++g_audio_sequence;
+                        ++g_audio_attempts;Copy(g_scheduled,sizeof(g_scheduled),status.id);xQueueOverwrite(g_audio_commands,&command);
                     }
                     if(completed && speech_ready && !std::strcmp(status.id,g_played)) Copy(g_ack,sizeof(g_ack),status.id);
                 }
@@ -301,6 +330,23 @@ void NetworkTask(void*) {
     }
     vTaskDelete(nullptr);
 }
+void Quiesce() {
+    g_shutdown=true;g_record=false;++g_audio_generation;
+    HearthNetStop();
+}
+esp_err_t ApplyConfig(const HearthConfig& staged) {
+    Quiesce();
+    int64_t deadline=esp_timer_get_time()+135000000;
+    while(!g_audio_stopped.load() || !g_display_stopped.load()) {
+        if(esp_timer_get_time()>deadline) return ESP_ERR_TIMEOUT;
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    std::lock_guard<std::mutex> gate(g_audio_flash);
+    return HearthConfigSave(staged);
+}
+void StartTask(TaskFunction_t function,const char* name,uint32_t stack,UBaseType_t priority) {
+    if(xTaskCreate(function,name,stack,nullptr,priority,nullptr)!=pdPASS) {Error();esp_restart();}
+}
 }
 
 extern "C" void app_main() {
@@ -309,20 +355,20 @@ extern "C" void app_main() {
     ESP_ERROR_CHECK(result);
     ESP_ERROR_CHECK(g_board.Init());
     if(HearthConfigLoad(&g_config)!=ESP_OK) g_config={};
-    HearthConfigStartConsole(g_config);
     HearthLoadId("upload",g_client,sizeof(g_client));HearthLoadId("played",g_played,sizeof(g_played));HearthLoadId("dismissed",g_dismissed,sizeof(g_dismissed));
     g_audio_commands=xQueueCreate(1,sizeof(AudioCommand));g_pcm=xQueueCreate(8,sizeof(AudioPacket));
-    if(!g_audio_commands || !g_pcm) {Error();return;}
-    xTaskCreate(DisplayTask,"color_display",6144,nullptr,2,nullptr);
+    if(!g_audio_commands || !g_pcm) {Error();esp_restart();}
+    StartTask(DisplayTask,"color_display",6144,2);
+    StartTask(AudioTask,"codec_owner",8192,5);
     if(HearthConfigComplete(g_config)) {
         ESP_ERROR_CHECK(HearthWifiStart(g_config));
-        xTaskCreate(AudioTask,"codec_owner",8192,nullptr,5,nullptr);
-        xTaskCreate(AudioReader,"reply_network",8192,nullptr,3,nullptr);
-        xTaskCreate(NetworkTask,"device_network",12288,nullptr,3,nullptr);
+        StartTask(AudioReader,"reply_network",8192,3);
+        StartTask(NetworkTask,"device_network",12288,3);
     }
+    HearthConfigStartConsole(g_config,ApplyConfig);
     for(;;) {
         ZectrixButtonEvent event{};
-        if(g_board.WaitButton(&event,pdMS_TO_TICKS(20))) {
+        if(g_board.WaitButton(&event,pdMS_TO_TICKS(20)) && !g_shutdown.load()) {
             if(event.button==ZectrixButton::kOk && event.action==ZectrixButtonAction::kLongPress) {
                 if(HearthConfigComplete(g_config)) {
                     ++g_audio_generation;
@@ -332,7 +378,7 @@ extern "C" void app_main() {
             } else if(event.action==ZectrixButtonAction::kClick) {
                 Navigate(event.button==ZectrixButton::kUp);
             } else if(event.button==ZectrixButton::kDown && event.action==ZectrixButtonAction::kLongPress) {
-                g_shutdown=true;++g_audio_generation;
+                g_sleep_requested=true;Quiesce();
             }
         }
         int64_t now=esp_timer_get_time();
@@ -340,8 +386,8 @@ extern "C" void app_main() {
         if(!indicator && g_error_until.load()>now) indicator=(now/150000)%4==0;
         else if(!indicator && (g_processing.load() || g_audio_busy.load())) indicator=(now/250000)%2==0;
         g_board.SetPowerLed(indicator);
-        if(g_shutdown.load() && !g_display_busy.load() && !g_audio_busy.load() && g_cache_safe.load()) {
-            g_board.SetPowerLed(false);g_board.ReleaseAudio();
+        if(g_sleep_requested.load() && g_audio_stopped.load() && g_display_stopped.load()) {
+            g_board.SetPowerLed(false);
             esp_sleep_enable_ext1_wakeup_io(1ULL<<ZECTRIX_BUTTON_OK,ESP_EXT1_WAKEUP_ANY_LOW);
             esp_deep_sleep_start();
         }

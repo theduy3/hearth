@@ -14,6 +14,7 @@ constexpr const char* kNamespace = "catthew";
 constexpr uint32_t kMagic = 0x43415431;
 struct Stored { uint32_t magic; HearthConfig config; };
 HearthConfig g_boot{};
+esp_err_t (*g_apply)(const HearthConfig&)=nullptr;
 
 template<size_t N> bool Bounded(const char (&value)[N]) {
     return strnlen(value, N) < N;
@@ -63,7 +64,7 @@ void Console(void*) {
                 CopyJson(document, "password", staged.password, sizeof(staged.password)) &&
                 CopyJson(document, "hub", staged.hub, sizeof(staged.hub)) &&
                 CopyJson(document, "token", staged.token, sizeof(staged.token)) && HearthConfigComplete(staged);
-            if (valid && HearthConfigSave(staged) == ESP_OK) {
+            if (valid && g_apply && g_apply(staged) == ESP_OK) {
                 Result(true, "saved; rebooting");
                 cJSON_Delete(document);
                 std::memset(line, 0, sizeof(line));
@@ -157,8 +158,9 @@ void HearthLoadId(const char* key, char* value, size_t capacity) {
     nvs_close(handle);
 }
 
-void HearthConfigStartConsole(const HearthConfig& config) {
+void HearthConfigStartConsole(const HearthConfig& config, esp_err_t (*apply)(const HearthConfig&)) {
     g_boot = config;
+    g_apply = apply;
     setvbuf(stdin, nullptr, _IONBF, 0);
-    xTaskCreate(Console, "private_usb_setup", 6144, nullptr, 2, nullptr);
+    if(xTaskCreate(Console, "private_usb_setup", 6144, nullptr, 2, nullptr)!=pdPASS) esp_restart();
 }
