@@ -17,7 +17,7 @@ root=Path('/home/hermes/.hermes')
 profile=root/'profiles/catthew'
 c=yaml.safe_load((profile/'config.yaml').read_text())
 raw=(root/'catthew-terminal-state/terminal.env').read_text()
-checks={'model':c.get('model',{}).get('default')=='gpt-6.1-sol',
+checks={'model':c.get('model',{}).get('default')=='gpt-6.1-terra',
         'provider':c.get('model',{}).get('provider')=='openai-codex',
         'soul_sha256':hashlib.sha256((profile/'SOUL.md').read_bytes()).hexdigest()}
 try:

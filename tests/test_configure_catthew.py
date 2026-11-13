@@ -46,7 +46,7 @@ class ConfigureTests(unittest.TestCase):
         self.assertEqual(cfg["skills"], self.profile_config["skills"])
         self.assertEqual(cfg["mcp_servers"]["existing-server"], {"command": "keep-me"})
         self.assertEqual(cfg["model"]["provider"], "openai-codex")
-        self.assertEqual(cfg["model"]["default"], "gpt-6.1-sol")
+        self.assertEqual(cfg["model"]["default"], "gpt-6.1-terra")
         self.assertEqual((self.profile / "SOUL.md").read_bytes(), soul)
         self.assertEqual(cfg["platform_toolsets"]["api_server"], ["stt", "catthew-household"])
         self.assertEqual(cfg["known_plugin_toolsets"]["api_server"], ["homeassistant"])

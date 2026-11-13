@@ -8,7 +8,7 @@ Modify the cloned Hearth project into a color Note4C voice/display terminal for 
 
 The terminal should show household tasks, events, and useful tagged family notes. Catthew processes English requests and returns a concise text reply plus an updated display. Calendar is **Kittyggup Family**, timezone **America/Vancouver**. Preserve existing `catthew` task selection and creation rules; make exact `kittyggup`-tagged reference notes available for family questions. Use household-scoped capabilities and a distinct persistent Note4C conversation; preserve Telegram and CLI access to the same Catthew identity and household records.
 
-The intended model is **ChatGPT sol6.1**, per the user's correction. Verify the exact available Hermes provider/model identifier before applying it; do not guess an identifier, substitute Grok, or create new provider credentials. Preserve SOUL throughout.
+The intended model is **ChatGPT Terra6.1**, exact identifier `openai-codex` / `gpt-6.1-terra`, per the user's latest explicit selection, superseding the earlier Sol choice. Do not substitute another model or create new provider credentials. Preserve SOUL throughout.
 
 Low-risk household task creation may proceed immediately. Changing/deleting calendar events or performing unrelated consequential actions requires explicit confirmation. Replies must be both displayed as text and spoken in English through the device speaker. Hold the front button to talk, release to send, and short press to change pages. These output and gesture choices were explicitly confirmed in chat after the canvas annotations.
 
@@ -19,7 +19,7 @@ Low-risk household task creation may proceed immediately. Changing/deleting cale
 - Mac exposes `/dev/cu.usbmodem101`; physical board identity and flash size still require verification before any device operation.
 - SSH alias `bluehost` works in batch mode. Existing Hermes profile: host `/root/.hermes/profiles/catthew`. Vault: host `/root/theduyvault`.
 - Hermes runs in Docker. Host `/usr/local/bin/hermes` is a wrapper around `docker exec` into container `hermes`; its profile paths use `/home/hermes/.hermes/profiles/catthew`, and household instructions refer to `/vault`. Service additions must respect existing mounts and runtime ownership.
-- Earlier inspection of the saved Catthew configuration showed `grok-4.7` / `xai-oauth`. The user has explicitly corrected the intended state to **ChatGPT sol6.1** and says Grok is no longer in use. Treat the old file as potentially stale; verify effective runtime, profile selection, and exact available model identifier before any configuration change. Do not treat the earlier observation as the user's desired provider.
+- Initial inspection found `grok-4.7` / `xai-oauth`; the user first selected Sol, then explicitly selected **ChatGPT Terra6.1**. The live profile currently matches `openai-codex` / `gpt-6.1-terra`. Verify effective runtime and profile selection before any configuration change; historical observations do not override the latest user choice.
 - Existing `household-task-briefings` skill names calendar **Kittyggup Family**, timezone **America/Vancouver**, and a task selection rule based on tag `catthew`. It already expects dated tasks to link to calendar events and requires confirmation before calendar edits/deletions.
 - Existing Google helper supports explicit `--calendar` selection; default is `primary`, so every integration must pass the family calendar ID explicitly. Calendar OAuth files exist; live authorization, scope, calendar access, and write permission have not been tested.
 - A text scan found one Markdown file mentioning `kittyggup` and none mentioning `kittygup`. This is a search result, not a verified count of correctly tagged notes. Existing tags and task schema need exact frontmatter/body-tag parsing.
@@ -117,7 +117,7 @@ Default privacy proposal: raw microphone audio and synthesized reply audio kept 
 
 ### 1. Resolve contracts and preserve existing behavior
 
-Verify effective Catthew runtime and the exact ChatGPT sol6.1 identifier, calendar ID/access, existing task schema, household tool boundary, `zectrix.theduy.cloud` DNS/ingress, and English STT/TTS service choices. Output and gesture choices are settled: spoken plus text, hold-to-talk/release-to-send, short-press page navigation. Record baseline Catthew SOUL/config hashes. Establish the supported agent ingress and session contract. Create an isolated implementation branch/worktree after final approval.
+Verify effective Catthew runtime and the exact ChatGPT Terra6.1 identifier, calendar ID/access, existing task schema, household tool boundary, `zectrix.theduy.cloud` DNS/ingress, and English STT/TTS service choices. Output and gesture choices are settled: spoken plus text, hold-to-talk/release-to-send, short-press page navigation. Record baseline Catthew SOUL/config hashes. Establish the supported agent ingress and session contract. Create an isolated implementation branch/worktree after final approval.
 
 Pass: no unresolved product or authorization choices; exact paths and ingress documented; baseline tests green. No remote mutations yet.
 
@@ -125,7 +125,7 @@ Pass: no unresolved product or authorization choices; exact paths and ingress do
 
 Replace specialized Hearth profile installation/invocation with the approved Catthew integration. Add typed request states (accepted, processing, needs confirmation, complete, failed), reply text, result references, and durable deduplication. Prefer SQLite for hub request/cache state; keep household facts in existing sources. Build read projections from the existing calendar and vault conventions. Test using fake provider boundaries before any real writes.
 
-Pass: text question produces a Catthew reply; one approved test task/event is created once; Telegram/CLI changes appear on the same display view; failures cannot produce false success; SOUL hash is unchanged; effective model/provider matches the verified ChatGPT sol6.1 selection.
+Pass: text question produces a Catthew reply; one approved test task/event is created once; Telegram/CLI changes appear on the same display view; failures cannot produce false success; SOUL hash is unchanged; effective model/provider matches the verified ChatGPT Terra6.1 selection.
 
 ### 3. VPS speech and HTTPS path
 
@@ -186,7 +186,7 @@ Recorded from annotations fb-57 through fb-64:
 | --- | --- |
 | Calendar/timezone | Kittyggup Family; America/Vancouver |
 | Vault scope | Existing `catthew` tasks plus `kittyggup` reference notes (the annotated recommendation) |
-| Identity/model | Existing Catthew SOUL; ChatGPT sol6.1, exact runtime identifier to verify |
+| Identity/model | Existing Catthew SOUL; `openai-codex` / `gpt-6.1-terra`, explicitly selected by user |
 | Input language | English |
 | Replies | Displayed text and English speech through the device speaker (confirmed in chat) |
 | Front button | Hold to talk, release to send; short press changes pages (confirmed in chat) |

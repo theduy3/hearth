@@ -16,7 +16,7 @@ The panel uses full refreshes; the user observed about15seconds for a page chang
 
 ## Household scope
 
-Catthew keeps its existing SOUL. The approved model selection is `openai-codex` / `gpt-6.1-sol`; the latest release check detected a live selection of `gpt-6.1-terra`, left unchanged pending user direction (see the progress ledger). Note4C has a separate persistent conversation while sharing the same underlying records with Telegram and CLI.
+Catthew keeps its existing SOUL. The user-selected model is `openai-codex` / `gpt-6.1-terra`; setup and release checks preserve that choice. Note4C has a separate persistent conversation while sharing the same underlying records with Telegram and CLI.
 
 - Calendar: **Kittyggup Family**, timezone **America/Vancouver**.
 - Tasks: exact `catthew` tag in existing `Tasks/tasks`, `Tasks/bugs` and `Tasks/ideas`.

@@ -60,7 +60,7 @@ def _replace_grok(config):
         elif key == "provider" and value == "xai-oauth":
             config[key] = "openai-codex"
         elif key in ("model", "default") and isinstance(value, str) and value.startswith("grok-"):
-            config[key] = "gpt-6.1-sol"
+            config[key] = "gpt-6.1-terra"
 
 
 def _catalog(root, python):
@@ -109,7 +109,7 @@ def configure(root, project, python, state):
     for target in (root_cfg, cfg):
         target.setdefault("known_plugin_toolsets", {})["api_server"] = catalog["plugins"]
         target.setdefault("known_builtin_toolsets", {})["api_server"] = catalog["builtins"]
-    cfg.setdefault("model", {}).update({"provider": "openai-codex", "default": "gpt-6.1-sol"})
+    cfg.setdefault("model", {}).update({"provider": "openai-codex", "default": "gpt-6.1-terra"})
     _replace_grok(cfg["model"])
     if isinstance(cfg.get("auxiliary"), dict):
         _replace_grok(cfg["auxiliary"])
@@ -160,7 +160,7 @@ def configure(root, project, python, state):
             elif path.exists():
                 path.unlink()
         raise
-    return {"model": "gpt-6.1-sol", "provider": "openai-codex", "soul_sha256": soul_hash,
+    return {"model": "gpt-6.1-terra", "provider": "openai-codex", "soul_sha256": soul_hash,
             "listener": "127.0.0.1:8642", "tool_servers": list(SERVERS), "backup": str(backup)}
 
 
