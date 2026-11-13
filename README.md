@@ -43,6 +43,8 @@ The wizard checks the four labeled calibration patches before pairing. Enter the
 
 It then guides a read-only English greeting, page navigation, playback interruption and a reply while the Mac sleeps and the tablet uses wall power. A fresh VPS job and full-playback acknowledgement are checked for voice tests. Physical acceptance evidence stays under `$HOME/.local/share/catthew-note4c/`.
 
+The wizard verifies Wi-Fi, time synchronization and a successful authenticated frame before advancing to voice. If it reports Wi-Fi reason201, the configured network was not found. Retry only private Wi-Fi pairing with `./tools/setup-note4c.sh --wifi-only`, using the exact reachable2.4GHz network name. USB status checks hold one connection open because opening USB restarts this board; do not run them during a recording.
+
 If a color, audio or gesture check fails, stop at that stage and report the observed behavior. Live family write tests require their separately confirmed record and cleanup; pairing does not authorize test calendar/task mutations.
 
 ## Build and verify

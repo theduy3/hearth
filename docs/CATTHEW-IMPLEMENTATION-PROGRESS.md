@@ -16,6 +16,12 @@ Workspace: `/Users/theduy/Repo/hearth-catthew-note4c`, branch `feat/catthew-note
 - VPS release check passes: HTTPS/auth, exact30,000-byte frame/hash, next/previous headers, selected model/provider, unchanged SOUL, household tool policy, Catthew Telegram, speech, active units and exactly one terminal process owned by its service.
 - Fresh post-reload synthetic voice request `2f8898cfdeed461587016d5c260c46c8` passed HTTPS→STT→Catthew→text/audio at16kHz with98,452 PCM bytes. It was a read-only greeting and changed no family records.
 
+## First physical attempt: network blocker
+
+User reached voice stage but heard no reply; front hold made the indicator steady and release flashed, while a short press did not change pages. Server had no physical-device request. Credential-free diagnostic firmware6970d03 (CI43370659319 passed) was flashed and verified without NVS erasure; pairing remains saved. A25-second single-connection USB trace and the agent-runnable `provision_note4c wait-online --timeout12` both show wifi=0, wifi_reason=201 (NO_AP_FOUND), clock=0, frame_count=0 and no HTTP/upload attempts. The configured network is not discoverable; private correct2.4GHz network input/range is needed before further voice acceptance.
+
+Opening USB restarts this board. The provisioning helper now holds one connection across identity/status polling rather than resetting between commands. The wizard now requires Wi-Fi, time and an authenticated fetched frame before voice, and supports `--wifi-only` repair. Regression tests cover persistent connection ownership, credential filtering and readiness failures. No credentials were printed or re-entered by the assistant, and no family records were changed. Current user action: run `./tools/setup-note4c.sh --wifi-only` privately and report DEVICE_NETWORK_VERIFIED or the exact non-secret error. Physical voice/navigation and G5/G6 remain unverified.
+
 ## Architecture and reviewed behavior
 
 The VPS owns household data, English STT/TTS, agent calls and Unicode BWRY rendering. Device owns authenticated TLS, runtime NVS settings, buttons, exclusive codec ownership and immutable frame projection. It has separate display, audio, audio-download and network tasks; no recording/processing/clock-second panel refresh.

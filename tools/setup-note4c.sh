@@ -201,22 +201,30 @@ finish() {
 run_wizard() {
 set +x
 TOTAL_STAGES=5
+task_wifi_only=false
+case "${1:-}" in
+  '') ;;
+  --wifi-only) task_wifi_only=true; TOTAL_STAGES=1 ;;
+  *) printf 'Usage: %s [--wifi-only]\n' "$0" >&2; exit 2 ;;
+esac
 task_repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$task_repo_root"
 task_private_root="$HOME/.local/share/catthew-note4c"
 ENV_FILE="$task_private_root/wizard-values-never-written.env"
 
+if ! $task_wifi_only; then
 stage "Check the four-color calibration card"
 say "The backed-up Note4C has already been flashed and verified."
 say "Keep its USB cable connected to this Mac for pairing."
 say "The first full screen update can take up to two minutes."
 step "Find the four labeled BLACK / WHITE / RED / YELLOW patches."
 confirm "Are all four patches the correct colors, with readable text?" || { warn "Stop here and report the screen appearance; do not provision yet."; exit 1; }
+fi
+
+stage "Enter private Wi-Fi details"
 ask NOTE4C_PORT "USB port [Enter uses /dev/cu.usbmodem101]:"
 NOTE4C_PORT="${NOTE4C_PORT:-/dev/cu.usbmodem101}"
 uvx --from esptool==5.6.0 python -m tools.provision_note4c info --port "$NOTE4C_PORT"
-
-stage "Enter private Wi-Fi details"
 say "Use your 2.4 GHz network name and its Wi-Fi password."
 say "These go directly to the device. They are not saved in this repository or printed in logs."
 say "The device token is retrieved privately from Bluehost; no model credentials go to the tablet."
@@ -224,6 +232,12 @@ ask NOTE4C_SSID "2.4 GHz Wi-Fi network name:"
 ask_secret NOTE4C_PASSWORD "Wi-Fi password (hidden; empty for an open network):"
 printf '%s\0%s\0' "$NOTE4C_SSID" "$NOTE4C_PASSWORD" | uvx --from esptool==5.6.0 python -m tools.provision_note4c pair --port "$NOTE4C_PORT"
 unset NOTE4C_PASSWORD NOTE4C_SSID
+say "Checking Wi-Fi, time synchronization and an authenticated household frame (up to90seconds)."
+uvx --from esptool==5.6.0 python -m tools.provision_note4c wait-online --port "$NOTE4C_PORT"
+if $task_wifi_only; then
+  say "Wi-Fi and authenticated frame fetching passed. Tell the assistant the network check passed."
+  return
+fi
 pause "Wait for reboot and the first household page, then press Enter."
 confirm "Is a readable household page on the device?" || { warn "Stop and report what you see; credentials have not been printed."; exit 1; }
 
