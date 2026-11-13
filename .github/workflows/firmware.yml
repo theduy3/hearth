@@ -30,7 +30,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source /opt/esp/idf/export.sh
           idf.py -C firmware set-target esp32s3
-          idf.py -C firmware -j 2 build
+          idf.py -C firmware build
           python3 tools/firmware_manifest.py firmware/build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

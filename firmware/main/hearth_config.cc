@@ -64,8 +64,9 @@ void Console(void*) {
                 CopyJson(document, "password", staged.password, sizeof(staged.password)) &&
                 CopyJson(document, "hub", staged.hub, sizeof(staged.hub)) &&
                 CopyJson(document, "token", staged.token, sizeof(staged.token)) && HearthConfigComplete(staged);
-            if (valid && g_apply && g_apply(staged) == ESP_OK) {
-                Result(true, "saved; rebooting");
+            if (valid && g_apply) {
+                esp_err_t saved=g_apply(staged);
+                Result(saved==ESP_OK, saved==ESP_OK ? "saved; rebooting" : "save not confirmed; rebooting");
                 cJSON_Delete(document);
                 std::memset(line, 0, sizeof(line));
                 std::memset(&staged, 0, sizeof(staged));
