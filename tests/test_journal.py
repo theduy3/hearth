@@ -114,6 +114,37 @@ class JournalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.journal.session("x" * 129)
 
+    def test_delivery_cannot_be_acknowledged_early_or_resurrected_after_ack(self):
+        request = self.journal.accept("a", "id", b"wav")
+        self.journal.claim()
+        self.journal.begin_agent(request["id"], "hello")
+        self.journal.complete(request["id"], "Done")
+        self.assertFalse(self.journal.clear_audio("a", request["id"]))
+        self.journal.set_audio(request["id"], b"first")
+        self.assertTrue(self.journal.clear_audio("a", request["id"]))
+        self.journal.set_audio(request["id"], b"late synthesis")
+        self.journal.speech_failed(request["id"])
+        self.assertIsNone(self.journal.audio("a", request["id"]))
+        self.assertEqual(self.journal.get("a", request["id"])["speech_status"], "delivered")
+
+    def test_audio_cache_is_bounded_without_forgetting_completed_requests(self):
+        self.journal.close()
+        self.journal = Journal(self.path, reply_audio_capacity=8)
+        records = []
+        for index in range(2):
+            row = self.journal.accept("a", str(index), b"wav")
+            self.journal.claim()
+            self.journal.begin_agent(row["id"], "hello")
+            self.journal.complete(row["id"], "Done")
+            self.journal.set_audio(row["id"], b"12345")
+            records.append(row)
+        old = self.journal.get("a", records[0]["id"])
+        self.assertEqual(old["status"], "completed")
+        self.assertEqual(old["speech_status"], "expired")
+        self.assertEqual(old["reply"], "Done")
+        self.assertIsNone(self.journal.audio("a", old["id"]))
+        self.assertEqual(self.journal.accept("a", "0", b"wav")["id"], old["id"])
+
     def test_expired_raw_audio_is_never_processed(self):
         request = self.journal.accept("a", "id", b"wav", now=1)
         self.journal.expire(now=86402)

@@ -23,6 +23,8 @@ class _Reply:
 
     def chunks(self):
         while True:
+            if self.response.isclosed():
+                return
             remaining = self.deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError("gateway deadline exceeded")
@@ -141,12 +143,32 @@ class Gateway:
                        headers={"Authorization": "Bearer " + self.key,
                                 "Content-Type": "application/json", **(headers or {})})
 
+    def _assert_household_policy(self):
+        request = Request(self.base + "/v1/toolsets", headers={"Authorization": "Bearer " + self.key})
+        try:
+            with self._open(request, timeout=min(15, self.timeout)) as response:
+                raw = response.read(131073)
+                if len(raw) > 131072:
+                    raise ValueError("tool policy exceeded its limit")
+                data = json.loads(raw)
+                entries = data["data"]
+                if not isinstance(entries, list) or not entries:
+                    raise ValueError("invalid tool catalog")
+                for entry in entries:
+                    if not isinstance(entry, dict) or not isinstance(entry.get("enabled"), bool):
+                        raise ValueError("invalid tool policy")
+                    if entry["enabled"] and not (entry.get("name") == "stt" and entry.get("tools") == []):
+                        raise ValueError("native tools are enabled on the household channel")
+        except Exception:
+            raise GatewayError("Household tool policy is unavailable or exposes unexpected capabilities; no agent turn was started.", uncertain=False) from None
+
     def turn(self, text: str, session: str, device: str, *, on_run=None, on_approval=None):
         if not text.strip() or len(text) > 8000:
             raise ValueError("transcript is empty or too long")
         for value in (session, device):
             if not value or len(value) > 128 or any(c in value for c in "\r\n"):
                 raise ValueError("invalid session/device identifier")
+        self._assert_household_policy()
         req = self._request("/v1/chat/completions",
                             {"messages": [{"role": "user", "content": text}], "stream": True},
                             headers={"X-Hermes-Session-Id": session,

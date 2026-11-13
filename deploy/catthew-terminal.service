@@ -1,0 +1,18 @@
+[Unit]
+Description=Catthew authenticated Note4C terminal
+Requires=docker.service
+After=docker.service network-online.target catthew-speech.service
+Wants=network-online.target catthew-speech.service
+
+[Service]
+Type=simple
+EnvironmentFile=/var/lib/docker/volumes/hermes_hermes-data/_data/catthew-terminal-state/terminal.env
+Environment=HOME=/home/hermes HERMES_HOME=/home/hermes/.hermes PATH=/home/hermes/.local/bin:/home/hermes/.hermes/hermes-agent/venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/libexec/catthew-terminal
+KillMode=control-group
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

@@ -26,6 +26,7 @@ class GatewayTests(unittest.TestCase):
         self.status = 200
         self.redirect = False
         self.drip = 0
+        self.policy = {"data": [{"name": "stt", "enabled": True, "tools": []}]}
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -33,6 +34,14 @@ class GatewayTests(unittest.TestCase):
                 pass
 
             def do_GET(self):
+                if self.path.endswith("/v1/toolsets"):
+                    payload = json.dumps(owner.policy).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 owner.requests.append((self.path, dict(self.headers), None))
                 self.send_response(200)
                 self.end_headers()
@@ -115,6 +124,21 @@ class GatewayTests(unittest.TestCase):
         self.frames = frame(no_id) + frame("[DONE]")
         with self.assertRaises(GatewayError):
             self.client.turn("hello", "session", "kitchen")
+
+    def test_native_tool_leak_blocks_agent_turn_before_submission(self):
+        self.policy = {"data": [{"name": "homeassistant", "enabled": True, "tools": ["ha_call_service"]}]}
+        with self.assertRaises(GatewayError) as caught:
+            self.client.turn("hello", "session", "kitchen")
+        self.assertFalse(caught.exception.uncertain)
+        self.assertEqual(self.requests, [])
+
+    def test_zero_tool_stt_marker_is_allowed_but_future_native_stt_tool_is_blocked(self):
+        self.policy = {"data": [{"name": "stt", "enabled": True, "tools": []}]}
+        self.assertEqual(self.client.turn("hello", "session", "kitchen"), "Catthew says hello.")
+        self.policy["data"][0]["tools"] = ["new_native_tool"]
+        with self.assertRaises(GatewayError):
+            self.client.turn("hello", "session", "kitchen")
+        self.assertEqual(len(self.requests), 1)
 
     def test_error_completion_sentinel_is_still_an_error(self):
         self.frames = frame(chunk("Done", finish="stop")) + frame("[DONE]", "error")

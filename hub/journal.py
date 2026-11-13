@@ -19,8 +19,9 @@ class QueueFull(RuntimeError):
 
 
 class Journal:
-    def __init__(self, path: Path, capacity: int = 8, history_capacity: int = 10000, device_capacity: int = 32):
+    def __init__(self, path: Path, capacity: int = 8, history_capacity: int = 10000, device_capacity: int = 32, reply_audio_capacity: int = 32 * 1024 * 1024):
         path = Path(path)
+        self.path = path
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         # Create with private permissions before SQLite writes any household data.
         fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
@@ -36,6 +37,7 @@ class Journal:
         self.capacity = capacity
         self.history_capacity = history_capacity
         self.device_capacity = device_capacity
+        self.reply_audio_capacity = reply_audio_capacity
         self._db.executescript("""
             CREATE TABLE IF NOT EXISTS devices (
                 id TEXT PRIMARY KEY, session TEXT NOT NULL UNIQUE
@@ -111,6 +113,26 @@ class Journal:
                                    (device, request_id)).fetchone()
             return self._public(row) if row else None
 
+    def by_upload(self, device: str, client_id: str):
+        with self._lock:
+            row = self._db.execute("SELECT * FROM requests WHERE device=? AND client_id=?", (device, client_id)).fetchone()
+            return self._public(row) if row else None
+
+    def latest(self, device: str, *, completed=False):
+        with self._lock:
+            query = "SELECT * FROM requests WHERE device=?"
+            if completed:
+                query += " AND status='completed'"
+            query += " ORDER BY created DESC,rowid DESC LIMIT 1"
+            row = self._db.execute(query, (device,)).fetchone()
+            return self._public(row) if row else None
+
+    def clear_audio(self, device: str, request_id: str):
+        with self._lock, self._db:
+            cursor = self._db.execute("UPDATE requests SET audio=NULL,speech_status='delivered' WHERE device=? AND id=? AND status='completed' AND speech_status IN ('ready','delivered','expired')",
+                                      (device, request_id))
+            return bool(cursor.rowcount)
+
     def claim(self):
         with self._lock, self._db:
             self._db.execute("BEGIN IMMEDIATE")
@@ -151,14 +173,24 @@ class Journal:
 
     def speech_failed(self, request_id: str):
         with self._lock, self._db:
-            self._db.execute("UPDATE requests SET speech_status='failed',updated=? WHERE id=? AND status='completed'",
+            self._db.execute("UPDATE requests SET speech_status='failed',updated=? WHERE id=? AND status='completed' AND speech_status='pending'",
                              (time.time(), request_id))
 
     def set_audio(self, request_id: str, audio: bytes):
-        if not audio or len(audio) > 4 * 1024 * 1024:
+        if not audio or len(audio) > min(4 * 1024 * 1024, self.reply_audio_capacity):
             raise ValueError("invalid reply audio size")
         with self._lock, self._db:
-            self._db.execute("UPDATE requests SET audio=?,speech_status='ready',updated=? WHERE id=? AND status='completed'",
+            self._db.execute("BEGIN IMMEDIATE")
+            eligible = self._db.execute("SELECT id FROM requests WHERE id=? AND status='completed' AND speech_status IN ('pending','failed')", (request_id,)).fetchone()
+            if not eligible:
+                return
+            used = self._db.execute("SELECT COALESCE(SUM(LENGTH(audio)),0) FROM requests").fetchone()[0]
+            for old in self._db.execute("SELECT id,LENGTH(audio) AS bytes FROM requests WHERE audio IS NOT NULL ORDER BY created,rowid").fetchall():
+                if used + len(audio) <= self.reply_audio_capacity:
+                    break
+                self._db.execute("UPDATE requests SET audio=NULL,speech_status='expired' WHERE id=?", (old["id"],))
+                used -= old["bytes"]
+            self._db.execute("UPDATE requests SET audio=?,speech_status='ready',updated=? WHERE id=? AND status='completed' AND speech_status IN ('pending','failed')",
                              (audio, time.time(), request_id))
 
     def audio(self, device: str, request_id: str):
