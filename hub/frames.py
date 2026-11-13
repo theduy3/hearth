@@ -5,13 +5,13 @@ import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from hub.household import event_elapsed
+from hub.household import PACIFIC, event_elapsed
 
 WIDTH, HEIGHT = 400, 300
 BLACK, WHITE, YELLOW, RED = 0, 1, 2, 3
@@ -109,7 +109,11 @@ class Frame:
 
 def _due(task):
     try:
-        return date.fromisoformat(task.get("due") or "")
+        value = task.get("due") or ""
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return date.fromisoformat(value)
+        due = datetime.fromisoformat(value)
+        return due.astimezone(PACIFIC).date() if due.tzinfo is not None else None
     except (ValueError, TypeError):
         return None
 
@@ -133,25 +137,20 @@ class Renderer:
         if key == "today":
             tasks = [task for task in view.get("tasks", [])
                      if task.get("status") not in ("completed", "done", "cancelled")
-                     and not event_elapsed(task, now) and (_due(task) is None or _due(task) <= now.date())]
-            tasks.sort(key=lambda task: (_due(task) or date.max, task.get("title", "")))
+                     and not task.get("grocery") and not event_elapsed(task, now)
+                     and _due(task) == now.date()]
+            tasks.sort(key=lambda task: task.get("title", ""))
             count = len(tasks)
-            label = f"Showing 5 of {count} · ask Catthew for more" if count > 5 else f"Today, overdue & undated · {count}"
+            label = f"Showing 5 of {count} today's tasks" if count > 5 else f"Today · {count} tasks"
             _text(draw, 16, 57, label, size=12)
             for index, task in enumerate(tasks[:5]):
-                self._task(draw, task, 77 + index * 34, now)
+                self._task(draw, task, 77 + index * 34)
             if not tasks:
-                _text(draw, 16, 90, "Nothing due today.", size=20)
+                _text(draw, 16, 90, "No tasks today.", size=20)
         elif key == "groceries":
             items = [item for item in view.get("groceries", []) if item.get("state") == "needed"]
-            label = f"Showing 7 of {len(items)} · ask Catthew for more" if len(items) > 7 else f"{len(items)} items to buy"
-            _text(draw, 16, 57, label, size=12)
             for index, item in enumerate(items[:7]):
-                y = 79 + index * 24
-                draw.rectangle((16, y + 3, 27, y + 14), outline=BLACK)
-                _text(draw, 36, y, item.get("item"), size=16, width=346)
-            if not items:
-                _text(draw, 16, 90, "Ask Catthew to add groceries.", size=18, rows=2)
+                _text(draw, 16, 68 + index * 24, item.get("item"), size=18, width=368)
         if (view.get("request") or {}).get("status") in ("failed", "uncertain"):
             draw.rectangle((16, 249, 383, 269), fill=RED)
             warning = "Request unconfirmed · check before repeating"
@@ -171,17 +170,15 @@ class Renderer:
         draw.line((16, 274, 383, 274), fill=BLACK)
         following, previous = pages[(selected + 1) % len(pages)], pages[(selected - 1) % len(pages)]
         label = {"today": "tasks", "groceries": "groceries"}[following]
-        _text(draw, 16, 282, f"Tap for {label} · {selected + 1}/2", size=11, width=285)
+        footer = f"Tap for {label} · {selected + 1}/2"
+        if key == "groceries" and len(items) > 7:
+            footer += f" · +{len(items) - 7} more"
+        _text(draw, 16, 282, footer, size=11, width=285)
         # The device overlays its small OFFLINE badge in this reserved area.
         pixels = pack_frame(image)
         return Frame(pixels, hashlib.sha256(pixels).hexdigest(), key, following, previous, 2)
 
     @staticmethod
-    def _task(draw, task, y, now):
-        due = _due(task)
-        overdue = due is not None and due < now.date()
-        color = RED if overdue else BLACK
-        draw.rectangle((16, y + 3, 27, y + 14), outline=color)
-        _text(draw, 36, y, task.get("title") or "Family task", size=15, width=346, color=color)
-        label = "OVERDUE · " + due.strftime("%b %-d") if overdue else ("Due today" if due else ("Check due date" if task.get("due") else "No due date"))
-        _text(draw, 36, y + 20, label, size=11, bold=overdue, color=color)
+    def _task(draw, task, y):
+        draw.rectangle((16, y + 3, 27, y + 14), outline=BLACK)
+        _text(draw, 36, y, task.get("title") or "Family task", size=17, width=346)

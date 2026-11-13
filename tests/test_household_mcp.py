@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from hub.approvals import ApprovalStore
 from hub.household_mcp import HouseholdTools
+from hub.journal import Journal
 
 
 class MCPBoundaryTests(unittest.TestCase):
@@ -20,11 +21,25 @@ class MCPBoundaryTests(unittest.TestCase):
             delete_event=lambda **kw: self.calls.append(kw) or {"ok": True},
         )
         self.household = SimpleNamespace(calendar=calendar, tasks=lambda: [], search_notes=lambda q: [])
-        self.safe = HouseholdTools(self.household, self.approvals)
+        self.journal = Journal(Path(self.tmp.name) / "requests.sqlite3")
+        self.safe = HouseholdTools(self.household, self.approvals, self.journal)
 
     def tearDown(self):
         self.approvals.close()
+        self.journal.close()
         self.tmp.cleanup()
+
+    def test_page_tool_requires_an_active_voice_request_and_does_not_mutate_household(self):
+        request = self.journal.accept("note4c", "voice", b"wav")
+        self.journal.claim()
+        self.journal.begin_agent(request["id"], "show today's tasks")
+        result = self.safe.call("note4c_show_page", {"request_id": request["id"], "page": "today"})
+        self.assertEqual(result, {"ok": True, "page": "today"})
+        self.assertEqual(self.calls, [])
+        with self.assertRaises(ValueError):
+            self.safe.call("note4c_show_page", {"request_id": request["id"], "page": "reply:0"})
+        self.journal.complete(request["id"], "Your tasks are ready.")
+        self.assertEqual(self.journal.page(request["id"]), "today")
 
     def test_model_cannot_directly_edit_delete_or_approve(self):
         for name in ("household_edit_event", "household_delete_event", "household_apply", "approve", "terminal", "read_file"):

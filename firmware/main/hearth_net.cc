@@ -150,7 +150,9 @@ esp_err_t HearthFetchDevice(const HearthConfig& config,HearthDeviceStatus* statu
         good=String(request,"id",status->id,sizeof(status->id)) && HearthRequestIdValid(status->id) &&
              String(request,"client_id",status->client,sizeof(status->client)) &&
              String(request,"status",status->status,sizeof(status->status)) &&
-             String(request,"speech_status",status->speech,sizeof(status->speech));
+             String(request,"speech_status",status->speech,sizeof(status->speech)) &&
+             String(request,"page",status->page,sizeof(status->page)) &&
+             (!status->page[0] || !std::strcmp(status->page,"today") || !std::strcmp(status->page,"groceries"));
         status->present=good;
     }
     cJSON_Delete(body);

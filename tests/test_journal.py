@@ -18,6 +18,26 @@ class JournalTests(unittest.TestCase):
         self.journal.close()
         self.tmp.cleanup()
 
+    def test_page_selection_is_scoped_to_a_processing_note4c_request(self):
+        request = self.journal.accept("note4c", "id", b"wav")
+        with self.assertRaises(ValueError):
+            self.journal.set_page(request["id"], "today")
+        self.journal.claim()
+        self.journal.begin_agent(request["id"], "show groceries")
+        with self.assertRaises(ValueError):
+            self.journal.set_page(request["id"], "chat")
+        self.journal.set_page(request["id"], "groceries")
+        self.assertEqual(self.journal.page(request["id"]), "")
+        self.journal.complete(request["id"], "Here are your groceries.")
+        self.assertEqual(self.journal.page(request["id"]), "groceries")
+        with self.assertRaises(ValueError):
+            self.journal.set_page(request["id"], "today")
+        other = self.journal.accept("other-device", "id", b"wav")
+        self.journal.claim()
+        self.journal.begin_agent(other["id"], "show tasks")
+        with self.assertRaises(ValueError):
+            self.journal.set_page(other["id"], "today")
+
     def test_upload_retry_returns_same_request_after_reopen(self):
         first = self.journal.accept("kitchen", "upload-1", b"wav")
         session = self.journal.session("kitchen")

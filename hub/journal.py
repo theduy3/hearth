@@ -51,6 +51,10 @@ class Journal:
                 audio BLOB, UNIQUE(device, client_id)
             );
             CREATE INDEX IF NOT EXISTS requests_queue ON requests(status, created);
+            CREATE TABLE IF NOT EXISTS request_pages (
+                request_id TEXT PRIMARY KEY,
+                page TEXT NOT NULL CHECK(page IN ('today','groceries'))
+            );
         """)
 
     def close(self):
@@ -151,6 +155,23 @@ class Journal:
                 (transcript, time.time(), request_id))
             if cursor.rowcount != 1:
                 raise ValueError("request is not transcribing")
+
+    def set_page(self, request_id: str, page: str):
+        if page not in ("today", "groceries"):
+            raise ValueError("unknown device page")
+        with self._lock, self._db:
+            cursor = self._db.execute("""INSERT INTO request_pages(request_id,page)
+                SELECT id,? FROM requests WHERE id=? AND device='note4c' AND status='processing'
+                ON CONFLICT(request_id) DO UPDATE SET page=excluded.page""", (page, request_id))
+            if cursor.rowcount != 1:
+                raise ValueError("page selection requires an active Note4C request")
+
+    def page(self, request_id: str):
+        with self._lock:
+            row = self._db.execute("""SELECT page FROM request_pages JOIN requests
+                ON requests.id=request_pages.request_id
+                WHERE requests.id=? AND device='note4c' AND status='completed'""", (request_id,)).fetchone()
+            return row[0] if row else ""
 
     def set_run(self, request_id: str, run_id: str):
         with self._lock, self._db:

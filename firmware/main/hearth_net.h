@@ -10,7 +10,7 @@ struct HearthFrameInfo {
 bool HearthFrameInfoValid(const HearthFrameInfo&);
 struct HearthDeviceStatus {
     bool present=false;
-    char id[33]{},client[129]{},status[17]{},speech[17]{};
+    char id[33]{},client[129]{},status[17]{},speech[17]{},page[33]{};
 };
 void HearthNetStop();
 int HearthNetLastStatus();

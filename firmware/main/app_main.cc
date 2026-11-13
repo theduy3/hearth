@@ -40,7 +40,7 @@ uint32_t g_pending_nav=0,g_nav=0;
 Upload* g_upload=nullptr;
 HearthFrameInfo g_displayed{},g_navigation{};
 int g_steps=0;
-char g_desired[33]="today",g_client[129]{},g_played[33]{},g_dismissed[33]{},g_scheduled[33]{},g_ack[33]{};
+char g_desired[33]="today",g_client[129]{},g_played[33]{},g_dismissed[33]{},g_scheduled[33]{},g_page_applied[33]{},g_ack[33]{};
 bool g_have_frame=false,g_suppress_audio=false;
 char g_audio_target[33]{};
 unsigned g_audio_attempts=0;
@@ -298,6 +298,10 @@ void NetworkTask(void*) {
                     if(failed || completed) {
                         g_processing=false;
                         if(failed || speech_failed) Error();
+                    }
+                    if(completed && status.page[0] && std::strcmp(g_page_applied,status.id)) {
+                        Copy(g_desired,sizeof(g_desired),status.page);g_steps=0;++g_nav;
+                        Copy(g_page_applied,sizeof(g_page_applied),status.id);
                     }
                     if(std::strcmp(g_audio_target,status.id)) {Copy(g_audio_target,sizeof(g_audio_target),status.id);g_audio_attempts=0;g_audio_retry_after=0;}
                     if(completed && speech_ready && !g_suppress_audio && !g_audio_busy.load() && !g_record.load() && g_audio_attempts<3 && now>=g_audio_retry_after && std::strcmp(status.id,g_played) && std::strcmp(status.id,g_dismissed) && std::strcmp(status.id,g_scheduled)) {

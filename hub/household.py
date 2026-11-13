@@ -201,6 +201,7 @@ class Household:
         return {"id": str(task_id), "title": title[:300], "status": str(meta.get("status") or "open"),
                 "due": str(meta.get("due_date") or ""), "revision": _digest(raw),
                 "calendar_event_id": str(meta.get("google_event_id") or ""),
+                "grocery": _has_tag(meta, body, "grocery"),
                 "kind": str(meta.get("kind") or meta.get("type") or "task"),
                 "all_day": meta.get("allDay") is True, "event_end": str(meta.get("event_end") or ""),
                 "recurring": bool(meta.get("recurrence") or meta.get("rrule") or meta.get("recurring"))}

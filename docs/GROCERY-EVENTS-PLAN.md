@@ -1,6 +1,6 @@
 # Event completion and shared Grocery Shopping page
 
-Latest user requirement: exactly two physical screens, **Tasks → Grocery Shopping**, with voice-only replies that leave the selected page in place. No chat page or extra pagination. Preserve Whisper base.en int8, Terra, Piper Joe, existing identity, private calendar approvals and device pairing.
+Latest user requirement: exactly two physical screens, **Tasks → Grocery Shopping**, with voice-only replies. Tasks shows only non-grocery tasks due today in America/Vancouver; an empty Grocery page has no placeholder. Task requests refresh/open Tasks, grocery changes refresh/open Grocery Shopping, and unrelated chat leaves the selected page in place. No chat page or extra pagination. Preserve Whisper base.en int8, Terra, Piper Joe, existing identity, private calendar approvals and device pairing.
 
 ## Authorized household changes
 
@@ -13,10 +13,10 @@ Preserve cancelled `/vault/Tasks/tasks/grocery-list.md` and its five items. The 
 ## Implementation and delivery
 
 1. Household storage provides explicit event expiry, shared grocery read/add/update/check, existing atomic writes and private history. Ordinary task/calendar contracts remain intact.
-2. Scoped MCP exposes `household_grocery_read`, `household_grocery_add` and `household_grocery_update`. Calendar edits/deletions retain private one-use approval.
-3. Terminal periodically completes known elapsed events and refreshes grocery records after voice turns; MCP reads do not mutate. Grocery data joins the derived offline cache.
-4. Renderer provides only `today` and `groceries`, with bounded previews and visible-pixel ETags. Replies are spoken. Compact request, speech, data-source and approval warnings remain visible.
-5. Firmware removes automatic navigation to the answer page. Existing independent capture/playback ownership, retry bounds, fast status polling and full-playback acknowledgement remain unchanged. Build using pinned CI and flash only verified regions with identity checks and NVS preserved.
+2. Scoped MCP exposes `household_grocery_read`, `household_grocery_add` and `household_grocery_update`. Calendar edits/deletions retain private one-use approval. A separate `note4c_show_page` tool stages a bounded page directive for the exact processing Note4C request; no household data is changed by navigation.
+3. Terminal periodically completes known elapsed events and refreshes grocery records after voice turns; MCP reads do not mutate. Grocery data joins the derived offline cache. Refresh projections before completing a request and publishing its page directive, independently of speech readiness. Journal page directives are bounded by the existing request-history limit and cannot target another device or a finished request.
+4. Renderer provides only `today` and `groceries`, with bounded previews and visible-pixel ETags. Tasks excludes groceries, overdue/undated/future work and uses the local day for timed due dates. Grocery rows contain item names only; an empty list stays blank below its heading. Replies are spoken. Compact request, speech, data-source and approval warnings remain visible.
+5. Firmware applies each completed request's explicit `today`/`groceries` directive once, preserving normal manual navigation and leaving unrelated chat alone. Existing independent capture/playback ownership, retry bounds, fast status polling and full-playback acknowledgement remain unchanged. Build using pinned CI and flash only verified regions with identity checks and NVS preserved.
 6. Deploy source with private backups and an idle request journal. Refresh only the household MCP child using its supervised reconnect lifecycle; verify actual updated discovery and a read-only grocery call. Do not restart the whole gateway/container. Verify public two-page navigation, grocery state, corrected Sea Star records, unchanged cancelled list, model/SOUL/security and selected speech stack. Update the existing draft PR; no merge.
 
 ## Gates
@@ -26,7 +26,9 @@ Preserve cancelled `/vault/Tasks/tasks/grocery-list.md` and its five items. The 
 - [ ] E3: Final two-screen contract, voice-only behavior, previews and pinned firmware build/identity-checked flash verified.
 - [ ] E4: Final review/full suite, live MCP discovery, public pages/status/security, authorized Sea Star corrections, commit/push and draft PR updated.
 
-Local validation before the final two-screen change: 131 tests passed. Log `/tmp/catthew-grocery-tests.log`; interpreter `/Users/theduy/.local/share/catthew-note4c/test-venv/bin/python` (Python 3.14.7 with markdown-it-py 4.3.0). Requirements declare markdown-it-py >=3,<5. Prior P2 review findings were reproduced and fixed; follow-up review is running.
+Current local validation: **137 tests passed**, including today-only/local-day filtering, blank groceries, scoped typed page selection and fresh data before page publication while speech is pending. Latest changes are not deployed yet. Commit `4aebd3a` previously passed pinned firmware CI run 43387873147 and deployed the earlier two-screen backend; firmware flashing has not occurred. The three past Sea Star closures are now verified completed, November 20 remains pending, and cancelled groceries/completed older closures are unchanged. No calendar writes or fabricated grocery items occurred.
+
+Remaining integration blocker: the actual Catthew API session's deferred-tool snapshot still exposes seven old tools despite source deployment and a scoped MCP subprocess reconnect. Public `reload.mcp` without a session reports no changes and does not update this API session. Establish the supported per-session refresh before claiming working voice groceries/navigation. Latest firmware also needs a new CI build and an identity-checked flash with NVS preserved. Minimal esptool is installed in the private test venv; no ESP SDK is installed on Mac.
 
 MCP research: attach read-only to the existing owner using `discover_gateway_endpoint(profile_home).endpoint` and `connect_gateway(endpoint=...)`; the discovery wrapper itself is not an endpoint. `reload.mcp` only reconciles config and leaves unchanged healthy servers alive. `tools/mcp_tool_server_run.py:329–473` supervises transport drops with reconnect/backoff and rediscovery. Validate a new household child PID and actual tool visibility after a scoped restart. Do not assume a fresh standalone process proves the active model's catalog.
 

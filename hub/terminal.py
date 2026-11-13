@@ -142,6 +142,8 @@ class TerminalState:
     def device_status(self):
         record = self.journal.latest(self.device)
         request = {k: record[k] for k in ("id", "client_id", "status", "speech_status", "error", "created")} if record else None
+        if request is not None:
+            request["page"] = self.journal.page(record["id"])
         return {"request": request}
 
     def poster(self, offsets=None):
@@ -188,17 +190,20 @@ class TerminalState:
                 self.journal.begin_agent(job["id"], text)
                 agent_started = True
                 prompt = ("Family Note4C terminal: give a concise English reply for speech only. "
-                          "For groceries use the shared household_grocery tools, not tasks or calendar. Confirm changes only from successful tool results. "
+                          "When asked for tasks, read current records, include only today's non-grocery tasks and use note4c_show_page with page today. "
+                          "When asked to change groceries, use the shared household_grocery tools and note4c_show_page with page groceries. "
+                          "Pass this exact request reference as request_id to note4c_show_page; unrelated chat leaves the screen alone. "
+                          "Confirm changes only from successful tool results. "
                           f"Household timezone America/Vancouver; local time {datetime.now(PACIFIC).isoformat(timespec='seconds')}. "
                           f"Request reference {job['id']}. Use this reference in operation IDs; calendar changes need private approval.\n\n" + text)
                 reply = self.gateway.turn(prompt, self.journal.session(self.device), self.device,
                                           on_run=lambda run: self.journal.set_run(job["id"], run))
+                self.refresh()
                 self.journal.complete(job["id"], reply)
                 try:
                     self.journal.set_audio(job["id"], self.speech.synthesize(reply))
                 except Exception:
                     self.journal.speech_failed(job["id"])
-                self.refresh()
             except GatewayError as error:
                 self.journal.fail(job["id"], str(error), uncertain=error.uncertain)
             except Exception:

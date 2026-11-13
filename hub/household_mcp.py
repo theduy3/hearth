@@ -15,17 +15,23 @@ from pathlib import Path
 from hub.approvals import ApprovalStore
 from hub.calendar import FamilyCalendar
 from hub.household import Household, PACIFIC
+from hub.journal import Journal
 
 
-def _tool(name, description, fields, required, *, read_only=False):
+def _tool(name, description, fields, required, *, read_only=False, destructive=True):
     return {"name": name, "description": description,
             "inputSchema": {"type": "object", "properties": {
                 key: {"type": "string", "description": value, "maxLength": 8000}
                 for key, value in fields.items()}, "required": required, "additionalProperties": False},
-            "annotations": {"readOnlyHint": read_only, "destructiveHint": not read_only}}
+            "annotations": {"readOnlyHint": read_only, "destructiveHint": destructive and not read_only}}
 
+
+SHOW_PAGE_TOOL = _tool("note4c_show_page", "Select Tasks (today) or Grocery Shopping (groceries) after answering an active Note4C voice request. Use the exact request reference from that turn. Does not change household records. Select today when asked for tasks, groceries when asked to modify groceries; unrelated chat leaves the page unchanged.",
+                       {"request_id": "Exact active Note4C request reference", "page": "Exactly today or groceries"}, ["request_id", "page"], destructive=False)
+SHOW_PAGE_TOOL["inputSchema"]["properties"]["page"]["enum"] = ["today", "groceries"]
 
 SAFE_TOOLS = [
+    SHOW_PAGE_TOOL,
     _tool("household_read", "Read verified family events and Catthew-tagged tasks. Returns task revisions and event etags for edits.",
           {"start": "Optional timezone-aware ISO start", "end": "Optional timezone-aware ISO end"}, [], read_only=True),
     _tool("household_grocery_read", "Read the shared Grocery Shopping checklist and its current revision. Only needed items appear on the device grocery page; purchased items remain in the checklist.",
@@ -55,7 +61,8 @@ PROPOSAL_TOOLS = [
 
 
 class HouseholdTools:
-    def __init__(self, household, approvals):
+    def __init__(self, household, approvals, journal):
+        self.journal = journal
         self.household = household
         self.approvals = approvals
         self.tools = SAFE_TOOLS + PROPOSAL_TOOLS
@@ -71,6 +78,9 @@ class HouseholdTools:
         if any(not isinstance(value, str) or len(value) > 8000 for value in arguments.values()):
             raise ValueError("tool arguments must be bounded strings")
         h = self.household
+        if name == "note4c_show_page":
+            self.journal.set_page(arguments["request_id"], arguments["page"])
+            return {"ok": True, "page": arguments["page"]}
         if name == "household_read":
             start = arguments.get("start") or datetime.now(PACIFIC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
             end = arguments.get("end") or (datetime.fromisoformat(start) + timedelta(days=7)).isoformat()
@@ -137,7 +147,8 @@ def main():
     parser.add_argument("--state", type=Path, required=True)
     args = parser.parse_args()
     calendar = FamilyCalendar.from_profile(args.profile)
-    tools = HouseholdTools(Household(args.vault, calendar, args.state), ApprovalStore(args.state / "approvals.sqlite3"))
+    tools = HouseholdTools(Household(args.vault, calendar, args.state), ApprovalStore(args.state / "approvals.sqlite3"),
+                           Journal(args.state / "requests.sqlite3"))
     while True:
         line = sys.stdin.buffer.readline(65537)
         if not line:

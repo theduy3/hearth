@@ -125,6 +125,38 @@ class TerminalTests(unittest.TestCase):
             self.assertTrue(json.load(response)["ok"])
         self.assertIsNone(self.journal.audio("note4c", result["id"]))
 
+    def test_selected_page_is_published_after_refresh_before_speech_finishes(self):
+        from hub.household_mcp import HouseholdTools
+        tools = HouseholdTools(self.household, self.approvals, self.journal)
+        allow_audio = threading.Event()
+        def turn(text, session, device, **kwargs):
+            request = self.journal.latest("note4c")
+            self.household.groceries = lambda: {"items": [{"id": "item", "item": "Updated apples", "state": "needed"}], "revision": "new"}
+            tools.call("note4c_show_page", {"request_id": request["id"], "page": "groceries"})
+            kwargs["on_run"]("run-page")
+            return "Groceries updated."
+        def synthesize(text):
+            allow_audio.wait(3)
+            return wrap_pcm16(b"\0\0" * 800)
+        self.state.gateway.turn = turn
+        self.speech.synthesize = synthesize
+        try:
+            with self.request("/v1/utterance", data=wrap_pcm16(b"\0\0" * 16000), headers={"Content-Type": "audio/wav", "X-Hearth-Request-Id": "page-test"}) as response:
+                request_id = json.load(response)["request_id"]
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if self.journal.get("note4c", request_id)["status"] == "completed":
+                    break
+                time.sleep(.01)
+            with self.request("/v1/device") as response:
+                status = json.load(response)["request"]
+            self.assertEqual(status["page"], "groceries")
+            self.assertEqual(status["speech_status"], "pending")
+            with self.request("/v1/poster") as response:
+                self.assertEqual(json.load(response)["groceries"][0]["item"], "Updated apples")
+        finally:
+            allow_audio.set()
+
     def test_approval_link_get_has_no_effect_and_post_is_scoped_single_use(self):
         proposal = self.approvals.propose("proposal", "delete", {"event_id": "event-1", "etag": '"v1"'}, {"summary": "Family event"})
         self.state.dispatch_notifications()

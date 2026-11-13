@@ -13,7 +13,7 @@ NOW = datetime(2026, 11, 12, 10, 0, tzinfo=ZoneInfo("America/Vancouver"))
 
 
 def fixture():
-    return {"events": [], "tasks": [{"id": str(i), "title": "Family task " + str(i), "due": "2026-11-11" if i == 0 else "", "status": "open"} for i in range(9)],
+    return {"events": [], "tasks": [{"id": str(i), "title": "Family task " + str(i), "due": "2026-11-11" if i == 0 else "2026-11-12", "status": "open"} for i in range(9)],
             "notes": [{"id": "note", "title": "Gia đình", "text": "Chuẩn bị đồ dùng cho gia đình."}],
             "reply": "Hello. How can I help the family?", "request": {"id": "request", "status": "completed"},
             "stale": False, "source_errors": {"calendar": False, "vault": False}, "generated_at": "2026-11-12T10:00:00-08:00"}
@@ -59,18 +59,44 @@ class FrameTests(unittest.TestCase):
         self.assertEqual(grocery.next_page, "today")
         self.assertTrue(all(frame.pages == 2 and len(frame.pixels) == 30000 for frame in (daily, grocery)))
 
-    def test_daily_tasks_show_due_today_overdue_and_undated_but_not_future(self):
-        renderer = Renderer()
-        view = fixture()
-        view["tasks"] = [{"title": "Overdue", "due": "2026-11-11"},
-                         {"title": "Due today", "due": "2026-11-12"},
-                         {"title": "Undated", "due": ""},
-                         {"title": "Check invalid date", "due": "not-a-date"}]
+    def test_tasks_show_today_only_and_exclude_groceries(self):
+        renderer, view = Renderer(), fixture()
+        view["tasks"] = [{"title": "Today's family task", "due": "2026-11-12"}]
         original = renderer.render(view, "today", now=NOW).pixels
-        view["tasks"].append({"title": "Future task", "due": "2026-11-13"})
+        view["tasks"].extend([
+            {"title": "Overdue", "due": "2026-11-11"},
+            {"title": "Undated", "due": ""},
+            {"title": "Invalid date", "due": "not-a-date"},
+            {"title": "Future", "due": "2026-11-13"},
+            {"title": "Buy groceries", "due": "2026-11-12", "grocery": True},
+        ])
         self.assertEqual(renderer.render(view, "today", now=NOW).pixels, original)
-        view["tasks"][1]["title"] = "Changed task for today"
+        view["tasks"][0]["title"] = "Changed task for today"
         self.assertNotEqual(renderer.render(view, "today", now=NOW).pixels, original)
+
+    def test_timed_task_due_dates_use_the_household_local_day(self):
+        renderer, view = Renderer(), fixture()
+        view["tasks"] = [{"title": "Today's task", "due": "2026-11-12"}]
+        original = renderer.render(view, "today", now=NOW).pixels
+        view["tasks"][0]["due"] = "2026-11-13T01:00:00+00:00"
+        self.assertEqual(renderer.render(view, "today", now=NOW).pixels, original)
+        view["tasks"][0]["due"] = "2026-11-13T20:00:00+00:00"
+        self.assertNotEqual(renderer.render(view, "today", now=NOW).pixels, original)
+
+    def test_empty_groceries_do_not_render_an_instruction_or_item_count(self):
+        from unittest.mock import patch
+        import hub.frames
+        view = fixture()
+        labels = []
+        original = hub.frames._text
+        def capture(*args, **kwargs):
+            labels.append(str(args[3]))
+            return original(*args, **kwargs)
+        with patch.object(hub.frames, "_text", side_effect=capture):
+            Renderer().render(view, "groceries", now=NOW)
+        self.assertNotIn("Ask Catthew to add groceries.", labels)
+        self.assertNotIn("0 items to buy", labels)
+
 
     def test_hidden_calendar_and_notes_changes_do_not_refresh_either_page(self):
         renderer = Renderer()
@@ -83,13 +109,13 @@ class FrameTests(unittest.TestCase):
         after = {key: renderer.render(view, key, now=NOW).etag for key in before}
         self.assertEqual(before, after)
 
-    def test_elapsed_events_are_hidden_but_ordinary_overdue_tasks_remain(self):
+    def test_elapsed_events_and_ordinary_overdue_tasks_are_not_shown(self):
         renderer, view = Renderer(), fixture()
         original = renderer.render(view, "today", now=NOW).pixels
         view["tasks"].append({"id": "past-event", "title": "Closure has passed", "due": "2026-11-11", "kind": "event", "all_day": True})
         self.assertEqual(renderer.render(view, "today", now=NOW).pixels, original)
         view["tasks"][0]["title"] = "A genuine overdue task remains actionable"
-        self.assertNotEqual(renderer.render(view, "today", now=NOW).pixels, original)
+        self.assertEqual(renderer.render(view, "today", now=NOW).pixels, original)
 
     def test_grocery_changes_update_only_its_screen_and_purchases_disappear(self):
         renderer, view = Renderer(), fixture()

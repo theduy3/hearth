@@ -106,9 +106,11 @@ class GroceryEventTests(unittest.TestCase):
     def test_grocery_mcp_add_read_and_check_use_the_same_file(self):
         from hub.approvals import ApprovalStore
         from hub.household_mcp import HouseholdTools
+        from hub.journal import Journal
+        journal = Journal(Path(self.tmp.name) / "requests.sqlite3")
         approvals = ApprovalStore(Path(self.tmp.name) / "approvals.sqlite3")
         try:
-            tools = HouseholdTools(self.h, approvals)
+            tools = HouseholdTools(self.h, approvals, journal)
             names = {tool["name"] for tool in tools.handle({"id": 1, "method": "tools/list"})["result"]["tools"]}
             self.assertTrue({"household_grocery_read", "household_grocery_add", "household_grocery_update"} <= names)
             added = tools.call("household_grocery_add", {"operation_id": "spoken-milk", "item": "Milk (2 litres)"})
@@ -123,6 +125,7 @@ class GroceryEventTests(unittest.TestCase):
                     tools.call("household_grocery_add", arguments)
         finally:
             approvals.close()
+            journal.close()
 
     def test_duplicate_grocery_ids_fail_without_discarding_items(self):
         added = self.h.add_grocery("one", "Milk")
