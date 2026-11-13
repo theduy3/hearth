@@ -190,7 +190,9 @@ class TerminalState:
                 self.journal.begin_agent(job["id"], text)
                 agent_started = True
                 prompt = ("Family Note4C terminal: give a concise English reply for speech only. "
-                          "When asked for tasks, read current records, include only today's non-grocery tasks and use note4c_show_page with page today. "
+                          "When asked for tasks, read current records and use note4c_show_page with page today. "
+                          "For a general task request report today's non-grocery work; answer explicit requests for other dates verbally. "
+                          "The Tasks screen always remains limited to today's non-grocery tasks. "
                           "When asked to change groceries, use the shared household_grocery tools and note4c_show_page with page groceries. "
                           "Pass this exact request reference as request_id to note4c_show_page; unrelated chat leaves the screen alone. "
                           "Confirm changes only from successful tool results. "

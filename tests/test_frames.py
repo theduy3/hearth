@@ -67,6 +67,8 @@ class FrameTests(unittest.TestCase):
             {"title": "Overdue", "due": "2026-11-11"},
             {"title": "Undated", "due": ""},
             {"title": "Invalid date", "due": "not-a-date"},
+            {"title": "Out-of-range local time", "due": "0001-01-01T00:00:00+00:00"},
+            {"title": "Out-of-range event end", "due": "9999-12-31", "kind": "event", "all_day": True},
             {"title": "Future", "due": "2026-11-13"},
             {"title": "Buy groceries", "due": "2026-11-12", "grocery": True},
         ])

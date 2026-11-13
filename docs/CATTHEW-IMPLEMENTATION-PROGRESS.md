@@ -40,7 +40,19 @@ Matched synthetic greeting: Whisper warm median0.441s, Q8 warm median1.608s. Sin
 
 All111 host tests and fresh live VPS checks pass after restoration, including actual original STT/TTS, Terra, unchanged SOUL and scoped integrations. Full methodology, limits and reproduction locations: `docs/PARAKEET-BENCHMARK.md`; evaluation/selection gates: `docs/PARAKEET-GATES.md` (P1/P2 met; Q8 implementation/activation requirements superseded by the user’s Whisper choice). Existing physical acceptance and household pilot remain pending.
 
-## Two-screen display deployed
+## Current: today-only Tasks and Grocery Shopping deployed
+
+Latest user requirements supersede the earlier chat-screen layout. The two pages are `today` and `groceries`. Tasks shows only today's non-grocery work in America/Vancouver, including correct local dates for timezone-aware due times. Overdue/undated/future records remain in the shared vault. Grocery Shopping shows needed item names and leaves an empty list blank. Replies are voice-only. Task requests select freshly projected Tasks; grocery modifications select freshly projected Grocery Shopping; unrelated chat retains the current page.
+
+Source commits4aebd3a and09d1fa2 implement shared grocery read/add/update/check, explicit one-time-event expiry and typed request-scoped page directives.137tests pass locally and in fresh Linux CI; pinned ESP-IDF run43392558966 passed. Firmware09d1fa2 was identity-checked and verified in all3flash regions with NVS retained. One USB readiness session then confirmed Wi-Fi, time, online and an authenticated frame HTTP200. No local ESP SDK or production compilation was needed.
+
+The earlier unchanged-server MCP reconcile retained seven deferred tools. A supported temporary toggle of only the household MCP server, profile-scoped reload, exact original-config restoration and re-enable refreshed discovery. Actual Catthew API execution of the new grocery read returned zero items. A public synthetic task-speech request exercised Whisper→Catthew→MCP page selection→valid16kHz audio and selected `today`. Fresh public frame bytes match the full current household projection, and all VPS model/SOUL/speech/security/supervision checks pass. This does not replace physical gesture/speaker or a real grocery-write pilot.
+
+User-authorized closure corrections completed the three elapsed records and classified the future closure without completing it. All source dates/metadata, older completed closures and the cancelled five-item grocery history were preserved. No Google Calendar mutation or fabricated live grocery item occurred. Private verification is `grocery-events-verification.json`; source/runtime backups and original profile-config bytes are retained privately.
+
+Earlier independent grocery/event review findings were fixed with regressions. Latest typed-routing changes passed self-review,137tests, SDK compile and live routing, but a fresh independent follow-up is still blocked: the review service returned upstream502 and the fallback CLI returned invalid_params without review output. G7 remains open and PR1 remains draft/unmerged. G5/G6 physical and household acceptance also remain separate.
+
+## Historical: tasks and chat two-screen display
 
 User requested only a daily task page and an agent chat page because the full-color panel is slow. The VPS renderer now always returns exactly2screens: `today` (up to5 overdue/due-today/undated tasks, overflow count) and `reply:0` (one-screen latest-reply preview). Both next/previous headers toggle to the other screen; long lists/answers add no pages. Calendar/notes remain available to the agent; hidden source content changes do not alter either frame.
 

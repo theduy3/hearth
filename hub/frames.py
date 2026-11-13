@@ -114,7 +114,7 @@ def _due(task):
             return date.fromisoformat(value)
         due = datetime.fromisoformat(value)
         return due.astimezone(PACIFIC).date() if due.tzinfo is not None else None
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return None
 
 

@@ -118,7 +118,7 @@ def event_elapsed(item, now):
         else:
             return False
         return until <= now
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return False
 
 
